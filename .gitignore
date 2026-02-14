@@ -3,3 +3,6 @@ temporary/
 
 # Python environment
 .venv
+
+# Environment variables
+.env

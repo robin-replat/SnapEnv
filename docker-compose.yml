@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Data persistance between restart
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U preview -d preview_platform"] # CMD-SHELL is to execute the command using a shell
+      start_period: 10s # During the 10 first seconds it will ignore failure
+      interval: 10s # Run the check every 10s
+      timeout: 5s # Fail if it takes longer than 5s
+      retries: 5 # If it fails 5 times in a row mark container as unhealthy
+
+volumes:
+  postgres_data:
