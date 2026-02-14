@@ -1,0 +1,5 @@
+# Temporary folder
+temporary/
+
+# Python environment
+.venv
