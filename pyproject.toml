@@ -27,7 +27,8 @@ dependencies = [
     # Utilities
     "structlog>=24.4.0",
     "python-dotenv>=1.0.0",
-    ]
+    "psycopg2>=2.9.11",
+]
 
 
 [project.optional-dependencies]

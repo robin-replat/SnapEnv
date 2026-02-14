@@ -1,0 +1,83 @@
+"""Application configuration loaded from environment variables.
+
+Pydantic-settings automatically loads variables from:
+1. System environment variables
+2. The .env file (thanks to env_file=".env")
+
+In production (Docker/K8s), variables are injected by the orchestrator.
+Locally, we use the .env file to avoid exporting them manually.
+"""
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Centralized application configuration.
+
+    Each attribute corresponds to an environment variable.
+    Example: postgres_host → POSTGRES_HOST
+
+    Pydantic-settings automatically handles:
+    - Type conversion (str → int, str → bool, etc.)
+    - Default values
+    - Validation (if a required variable is missing → clear error)
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",          # Automatically load the .env file
+        env_file_encoding="utf-8",
+        case_sensitive=False,      # POSTGRES_HOST = postgres_host
+    )
+
+    # ── Application ───────────────────────────────────────
+    app_name: str = "SnapEnv"
+    debug: bool = False
+    log_level: str = "INFO"
+
+    # ── Database ──────────────────────────────────────────
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str = "preview_platform"
+
+    @property
+    def database_url(self) -> str:
+        """Async connection URL (used by the FastAPI app).
+
+        Format: postgresql+asyncpg://user:password@host:port/dbname
+        The '+asyncpg' tells SQLAlchemy to use the async driver.
+        """
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def database_url_sync(self) -> str:
+        """Sync connection URL (used by Alembic for migrations).
+
+        Alembic does not support async; it requires a sync driver (psycopg2).
+        """
+        return (
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+
+@lru_cache  # Singleton: config is loaded once and then cached
+def get_settings() -> Settings:
+    """Returns the single configuration instance.
+
+    @lru_cache ensures this function is executed only once.
+    Subsequent calls return the same object.
+    This prevents reloading the .env file on every request.
+    """
+    return Settings()
+
+
+# Shortcut for direct import: from src.models.config import settings
+# Allow to parse execute only one time the get_setting and directly consume it
+settings = get_settings()

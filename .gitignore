@@ -1,8 +1,11 @@
 # Temporary folder
 temporary/
 
-# Python environment
-.venv
+# Python environment / files
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
 
 # Environment variables
 .env
