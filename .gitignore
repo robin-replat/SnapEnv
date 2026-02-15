@@ -6,6 +6,17 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+
+# Gerenal caches
+.mypy_cache
+.pytest_cache
+.ruff_cache
 
 # Environment variables
 .env
+
+# Others
+.vscode

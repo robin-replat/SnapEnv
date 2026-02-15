@@ -26,13 +26,14 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",          # Automatically load the .env file
+        env_file=".env",  # Automatically load the .env file
         env_file_encoding="utf-8",
-        case_sensitive=False,      # POSTGRES_HOST = postgres_host
+        case_sensitive=False,  # POSTGRES_HOST = postgres_host
     )
 
     # ── Application ───────────────────────────────────────
     app_name: str = "SnapEnv"
+    preview_domain: str = "preview.localhost"
     debug: bool = False
     log_level: str = "INFO"
 

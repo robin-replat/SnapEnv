@@ -1,0 +1,28 @@
+repos:
+  # Ruff: linting + import sorting (replaces flake8 + isort)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.0
+    hooks:
+      - id: ruff
+        args: [--fix]       # Auto-fix what it can
+      - id: ruff-format     # Ruff's built-in formatter
+
+  # Black: code formatting (deterministic, no debates about style)
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace       # Remove trailing spaces
+      - id: end-of-file-fixer         # Ensure files end with newline
+      - id: check-yaml                # Validate YAML syntax
+        args: [--allow-multiple-documents]
+      - id: check-json                # Validate JSON syntax
+      - id: check-added-large-files   # Prevent accidentally committing large files
+        args: [--maxkb=500]
+      - id: check-merge-conflict      # Catch unresolved merge conflict markers
+      - id: detect-private-key        # Prevent committing private keys

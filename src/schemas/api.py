@@ -13,6 +13,7 @@ Naming convention:
 """
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,7 +25,6 @@ from src.models.entities import (
     StageStatus,
     StageType,
 )
-
 
 # ──────────────────────────────────────────────
 # Pipeline Stage
@@ -43,7 +43,7 @@ class PipelineStageResponse(BaseModel):
     stage_type: StageType
     status: StageStatus
     order: int
-    details: dict | None = None
+    details: dict[str, Any] | None = None
     duration_seconds: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -162,7 +162,7 @@ class EventResponse(BaseModel):
     id: str
     event_type: EventType
     message: str
-    metadata: dict | None = None
+    event_metadata: dict[str, Any] | None = None
     pull_request_id: str | None = None
     pipeline_id: str | None = None
     created_at: datetime

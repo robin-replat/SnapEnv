@@ -4,8 +4,8 @@ This is the main file that creates and configures the FastAPI app.
 Run with: uvicorn src.api.main:app --reload
 """
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
@@ -51,18 +51,10 @@ app.add_middleware(
 # Each router handles a group of related endpoints.
 # The prefix is prepended to all routes in the router.
 # Tags group endpoints in the Swagger documentation.
-app.include_router(
-    pull_requests.router, prefix="/api/pull-requests", tags=["pull-requests"]
-)
-app.include_router(
-    pipelines.router, prefix="/api/pipelines", tags=["pipelines"]
-)
-app.include_router(
-    events.router, prefix="/api/events", tags=["events"]
-)
-app.include_router(
-    dashboard.router, prefix="/api", tags=["dashboard"]
-)
+app.include_router(pull_requests.router, prefix="/api/pull-requests", tags=["pull-requests"])
+app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
+app.include_router(events.router, prefix="/api/events", tags=["events"])
+app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
 
 
 @app.get("/health", tags=["system"])

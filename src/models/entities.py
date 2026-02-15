@@ -13,6 +13,7 @@ PullRequest (the GitHub PR we track)
 
 import enum
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -27,10 +28,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-
 # ──────────────────────────────────────────────────────────────
 # Base
 # ──────────────────────────────────────────────────────────────
+
 
 class Base(DeclarativeBase):
     """Base class that all models inherit from.
@@ -42,7 +43,7 @@ class Base(DeclarativeBase):
 
     # It tells SQLAlchemy: when you see the Python type `dict`, use the PostgreSQL type JSONB
     type_annotation_map = {
-        dict: JSONB,
+        dict[str, Any]: JSONB,
     }
 
 
@@ -53,6 +54,7 @@ class Base(DeclarativeBase):
 
 class PRStatus(str, enum.Enum):
     """Possible states of a Pull Request."""
+
     OPEN = "open"
     MERGED = "merged"
     CLOSED = "closed"
@@ -60,10 +62,11 @@ class PRStatus(str, enum.Enum):
 
 class PipelineStatus(str, enum.Enum):
     """Possible states of a pipeline run."""
-    PENDING = "pending"      # Waiting to start
-    RUNNING = "running"      # Currently running
-    SUCCESS = "success"      # All stages succeeded
-    FAILED = "failed"        # At least one stage failed
+
+    PENDING = "pending"  # Waiting to start
+    RUNNING = "running"  # Currently running
+    SUCCESS = "success"  # All stages succeeded
+    FAILED = "failed"  # At least one stage failed
     CANCELLED = "cancelled"  # Cancelled (PR closed during run)
 
 
@@ -72,15 +75,17 @@ class StageType(str, enum.Enum):
 
     Each pipeline goes through these stages in order.
     """
-    LINT = "lint"                # Code style check
-    TEST = "test"                # Run tests
-    SONARQUBE = "sonarqube"      # Quality analysis
+
+    LINT = "lint"  # Code style check
+    TEST = "test"  # Run tests
+    SONARQUBE = "sonarqube"  # Quality analysis
     BUILD_IMAGE = "build_image"  # Build Docker image
-    DEPLOY = "deploy"            # Deploy to K8s via ArgoCD
+    DEPLOY = "deploy"  # Deploy to K8s via ArgoCD
 
 
 class StageStatus(str, enum.Enum):
     """Possible states of a pipeline stage."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
@@ -90,16 +95,18 @@ class StageStatus(str, enum.Enum):
 
 class EnvironmentStatus(str, enum.Enum):
     """Possible states of a preview environment."""
+
     PROVISIONING = "provisioning"  # Being created
-    RUNNING = "running"            # Accessible and functional
-    DEGRADED = "degraded"          # Partially functional
-    DESTROYING = "destroying"      # Being destroyed
-    DESTROYED = "destroyed"        # Destroyed
-    FAILED = "failed"              # Creation failed
+    RUNNING = "running"  # Accessible and functional
+    DEGRADED = "degraded"  # Partially functional
+    DESTROYING = "destroying"  # Being destroyed
+    DESTROYED = "destroyed"  # Destroyed
+    FAILED = "failed"  # Creation failed
 
 
 class EventType(str, enum.Enum):
     """Event types for the real-time dashboard stream."""
+
     PR_OPENED = "pr_opened"
     PR_UPDATED = "pr_updated"
     PR_CLOSED = "pr_closed"
@@ -155,9 +162,7 @@ class PullRequest(Base):
     base_branch: Mapped[str] = mapped_column(String(255), default="main")
 
     # Enum(PRStatus) creates a PostgreSQL ENUM type with values "open", "merged", "closed"
-    status: Mapped[PRStatus] = mapped_column(
-        Enum(PRStatus), default=PRStatus.OPEN, index=True
-    )
+    status: Mapped[PRStatus] = mapped_column(Enum(PRStatus), default=PRStatus.OPEN, index=True)
 
     # str | None = this column can be NULL (no URL before deployment)
     preview_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -213,9 +218,7 @@ class Pipeline(Base):
 
     __tablename__ = "pipelines"
 
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
 
     # ── Foreign key ──
     # Links this pipeline to a PullRequest.
@@ -236,18 +239,13 @@ class Pipeline(Base):
     github_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # ── Relationships ──
-    # back_populates="pipelines" means: on the PullRequest side, this relationship is called "pipelines"
+    # back_populates="pipelines" means: on the PullRequest side,
+    # this relationship is called "pipelines"
     pull_request: Mapped["PullRequest"] = relationship(back_populates="pipelines")
 
     stages: Mapped[list["PipelineStage"]] = relationship(
@@ -275,9 +273,7 @@ class PipelineStage(Base):
 
     __tablename__ = "pipeline_stages"
 
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     pipeline_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("pipelines.id", ondelete="CASCADE"),
@@ -285,9 +281,7 @@ class PipelineStage(Base):
     )
 
     stage_type: Mapped[StageType] = mapped_column(Enum(StageType))
-    status: Mapped[StageStatus] = mapped_column(
-        Enum(StageStatus), default=StageStatus.PENDING
-    )
+    status: Mapped[StageStatus] = mapped_column(Enum(StageStatus), default=StageStatus.PENDING)
     # order = position in the pipeline (1=lint, 2=test, 3=sonar, etc.)
     order: Mapped[int] = mapped_column(Integer)
 
@@ -301,15 +295,11 @@ class PipelineStage(Base):
     #   deploy:     {"namespace": "pr-42", "argocd_app": "preview-pr-42"}
     # It's more flexible than a column per result (we wouldn't have the
     # same columns for lint and deploy).
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Relationship ──
     pipeline: Mapped["Pipeline"] = relationship(back_populates="stages")
@@ -328,13 +318,11 @@ class Environment(Base):
 
     __tablename__ = "environments"
 
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     pull_request_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("pull_requests.id", ondelete="CASCADE"),
-        unique=True,   # Only one environment per PR (1:1 relation)
+        unique=True,  # Only one environment per PR (1:1 relation)
         index=True,
     )
 
@@ -356,12 +344,8 @@ class Environment(Base):
     cpu_limit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     memory_limit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    destroyed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    destroyed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Relationship ──
     pull_request: Mapped["PullRequest"] = relationship(back_populates="environment")
@@ -384,15 +368,13 @@ class Event(Base):
 
     __tablename__ = "events"
 
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     event_type: Mapped[EventType] = mapped_column(Enum(EventType), index=True)
     # Text = SQL TEXT (no length limit, unlike VARCHAR)
     message: Mapped[str] = mapped_column(Text)
 
     # Additional metadata (flexible, like details in PipelineStage)
-    event_metadata : Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    event_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # ── Optional foreign keys ──
     # An event can be linked to a PR, a pipeline, or both.

@@ -6,6 +6,7 @@ The WebSocket endpoint streams events in real time to the dashboard.
 
 import asyncio
 import json
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -24,7 +25,7 @@ router = APIRouter()
 connected_clients: set[WebSocket] = set()
 
 
-async def broadcast_event(event_data: dict) -> None:
+async def broadcast_event(event_data: dict[str, Any]) -> None:
     """Send an event to all connected WebSocket clients.
 
     Called by the Celery worker (via an intermediary) whenever
@@ -76,7 +77,7 @@ async def event_websocket(websocket: WebSocket) -> None:
         while True:
             # Keep connection alive; client can send pings or messages
             await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
-    except (WebSocketDisconnect, asyncio.TimeoutError):
+    except (TimeoutError, WebSocketDisconnect):
         pass
     finally:
         connected_clients.discard(websocket)

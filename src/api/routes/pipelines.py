@@ -18,11 +18,7 @@ async def get_pipeline(
     db: AsyncSession = Depends(get_db),
 ) -> PipelineResponse:
     """Get detailed pipeline information including all stages and their results."""
-    query = (
-        select(Pipeline)
-        .options(selectinload(Pipeline.stages))
-        .where(Pipeline.id == pipeline_id)
-    )
+    query = select(Pipeline).options(selectinload(Pipeline.stages)).where(Pipeline.id == pipeline_id)
 
     result = await db.execute(query)
     pipeline = result.scalar_one_or_none()

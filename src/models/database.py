@@ -27,10 +27,10 @@ from src.models.config import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,    # If debug=True, prints SQL queries in logs
-    pool_size=20,           # Number of connections kept open
-    max_overflow=10,        # Extra connections for peak load (total max = 30)
-    pool_pre_ping=True,     # Checks that the connection is alive before using it
+    echo=settings.debug,  # If debug=True, prints SQL queries in logs
+    pool_size=20,  # Number of connections kept open
+    max_overflow=10,  # Extra connections for peak load (total max = 30)
+    pool_pre_ping=True,  # Checks that the connection is alive before using it
 )
 
 # ── Session factory ───────────────────────────────────────
