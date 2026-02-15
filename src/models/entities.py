@@ -351,10 +351,10 @@ class Environment(Base):
 
     # ── K8s resource tracking ──
     # Stores CPU/memory limits requested for this environment.
-    cpu_request: Mapped[str] = mapped_column(String(20))
-    memory_request: Mapped[str] = mapped_column(String(20))
-    cpu_limit: Mapped[str] = mapped_column(String(20))
-    memory_limit: Mapped[str] = mapped_column(String(20))
+    cpu_request: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    memory_request: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cpu_limit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    memory_limit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

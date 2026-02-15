@@ -87,8 +87,6 @@ class PipelineSummary(BaseModel):
 
 
 class EnvironmentResponse(BaseModel):
-    """Full environment details."""
-
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -96,10 +94,10 @@ class EnvironmentResponse(BaseModel):
     url: str
     status: EnvironmentStatus
     argocd_app_name: str
-    cpu_request: str
-    memory_request: str
-    cpu_limit: str
-    memory_limit: str
+    cpu_request: str | None = None
+    memory_request: str | None = None
+    cpu_limit: str | None = None
+    memory_limit: str | None = None
     created_at: datetime
     destroyed_at: datetime | None = None
 
