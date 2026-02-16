@@ -1,4 +1,34 @@
 services:
+  # ── API Application ─────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      # These env vars override what's in .env inside the container.
+      # In Docker, services talk to each other by service name,
+      # so POSTGRES_HOST is "postgres" (the service name below),
+      # not "localhost".
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy      # Wait for DB to be ready
+    # In development: mount source code for hot reload.
+    # Changes to Python files are picked up without rebuilding.
+    volumes:
+      - ./src:/app/src
+    # Override the default CMD for development (adds --reload)
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Database ────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -8,7 +38,11 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Data persistance between restart
+      # Create a volume so data persists across container restarts.
+      - postgres_data:/var/lib/postgresql/data
+      # Init script: creates the test database automatically.
+      # Files in docker-entrypoint-initdb.d/ run on first container start.
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U preview -d preview_platform"] # CMD-SHELL is to execute the command using a shell
       start_period: 10s # During the 10 first seconds it will ignore failure

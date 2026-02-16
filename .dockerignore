@@ -1,0 +1,38 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info
+.venv
+venv
+
+# Environment (secrets)
+.env
+.env.*
+!.env.example
+
+# Tests
+tests/
+.pytest_cache
+.coverage
+htmlcov
+coverage.xml
+
+# Infrastructure (not part of the app)
+infra/
+docs/
+scripts/
+
+# IDE
+.vscode
+.idea
+
+# Docker (avoid recursive context)
+.docker
+docker-compose.yml
+
+# OS
+.DS_Store

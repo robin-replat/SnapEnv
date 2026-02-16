@@ -11,11 +11,23 @@ dev: ## Install dev dependencies and setup pre-commit hooks
 
 # ── Docker ────────────────────────────────────
 
-up: ## Start PostgreSQL
+up: ## Start all services (API + PostgreSQL)
 	docker compose up -d
 
-down: ## Stop PostgreSQL
+up-db: ## Start only PostgreSQL (for local dev without Docker API)
+	docker compose up -d postgres
+
+down: ## Stop all services
 	docker compose down
+
+logs: ## Tail logs from all services
+	docker compose logs -f
+
+logs-api: ## Tail logs from the API only
+	docker compose logs -f api
+
+rebuild: ## Rebuild images and restart services
+	docker compose up -d --build
 
 # ── Database ──────────────────────────────────
 

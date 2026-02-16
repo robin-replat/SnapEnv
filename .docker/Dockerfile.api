@@ -1,0 +1,56 @@
+# ─── Stage 1: Builder ─────────────────────────────────────────
+# This stage installs all dependencies into a separate prefix
+# so we can copy only the installed packages to the final image.
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Copy only dependency definitions first.
+# Docker caches layers — if pyproject.toml hasn't changed,
+# this layer is reused and dependencies aren't reinstalled.
+COPY pyproject.toml .
+
+# Install dependencies into a separate prefix (/install).
+# psycopg2-binary ships a pre-compiled wheel, no compiler needed.
+RUN pip install --no-cache-dir --prefix=/install .
+
+
+# ─── Stage 2: Runtime ─────────────────────────────────────────
+# This stage is the final image.
+# It only contains the Python runtime + installed packages + our code.
+FROM python:3.12-slim AS runtime
+
+# Security: create a non-root user.
+# Running as root in a container is a security risk because if an attacker
+# breaks into the app, they'd have root access to the container.
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+WORKDIR /app
+
+# Copy installed Python packages from the builder stage
+COPY --from=builder /install /usr/local
+
+# Copy application code
+COPY src/ ./src/
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+
+# Switch to non-root user before exposing the port
+USER appuser
+
+# HEALTHCHECK: Docker periodically runs this command.
+# If it fails 3 times in a row, Docker marks the container as "unhealthy".
+# Kubernetes uses its own probes, but this is useful for
+# docker compose and standalone Docker deployments.
+# Uses Python instead of curl (not available in slim images).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+EXPOSE 8000
+
+# Default command: start the API server.
+# --host 0.0.0.0 makes it listen on all interfaces (required in Docker).
+# Without it, uvicorn only listens on localhost, which is unreachable
+# from outside the container.
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
