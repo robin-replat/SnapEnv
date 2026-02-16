@@ -12,12 +12,12 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from src.models.config import settings
+from src.models.config import get_settings
 from src.models.entities import Base
 
 config = context.config
 
-config.set_main_option("sqlalchemy.url", settings.database_url_sync)
+config.set_main_option("sqlalchemy.url", get_settings().database_url_sync)
 
 # Configure logging from alembic.ini
 if config.config_file_name is not None:

@@ -77,8 +77,3 @@ def get_settings() -> Settings:
     This prevents reloading the .env file on every request.
     """
     return Settings()
-
-
-# Shortcut for direct import: from src.models.config import settings
-# Allow to parse execute only one time the get_setting and directly consume it
-settings = get_settings()

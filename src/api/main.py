@@ -13,7 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src import __description__, __version__
 from src.api.routes import dashboard, events, pipelines, pull_requests
-from src.models.config import settings
+from src.models.config import get_settings
+from src.models.database import init_db
 
 logger = structlog.get_logger()
 
@@ -26,13 +27,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Code after `yield` runs on shutdown.
     Used for initializing/closing connections, warming caches, etc.
     """
+    settings = get_settings()
+    init_db()
+    app.title = settings.app_name
     logger.info("app_starting", app_name=settings.app_name, debug=settings.debug)
     yield
     logger.info("app_shutting_down")
 
 
 app = FastAPI(
-    title=settings.app_name,
+    title="SnapEnv",
     version=__version__,
     description=__description__,
     lifespan=lifespan,
