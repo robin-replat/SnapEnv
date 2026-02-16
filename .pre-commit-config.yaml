@@ -1,4 +1,18 @@
 repos:
+  # Bandit: Python security linter
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml, -r, src, tests]
+        pass_filenames: false
+
+  # Gitleaks: secret scanning
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+
   # Ruff: linting + import sorting (replaces flake8 + isort)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.0

@@ -42,6 +42,7 @@ dev = [
     "ruff>=0.6.0",
     "black>=24.8.0",
     "mypy>=1.11.0",
+    "bandit>=1.8.0",
     "pre-commit>=3.8.0",
 ]
 
@@ -86,3 +87,9 @@ plugins = ["pydantic.mypy"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --cov=src --cov-report=term-missing"
+
+[tool.bandit]
+exclude_dirs = [".venv", "build", "dist"]
+
+[tool.bandit.assert_used]
+skips = ["*_test.py", "test_*.py", "tests/**"]

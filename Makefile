@@ -1,4 +1,4 @@
-.PHONY: help dev up down migrate test lint fmt check clean
+.PHONY: help dev up down migrate test lint security fmt check clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -30,15 +30,19 @@ migration: ## Create a new migration (usage: make migration msg="add users table
 test: ## Run tests with coverage
 	uv run pytest
 
-lint: ## Run linters (ruff + mypy)
+lint: ## Run linters (ruff + mypy + bandit)
 	uv run ruff check src/ tests/
 	uv run mypy src/ --ignore-missing-imports
+
+security: ## Run secret scanning (gitleaks via pre-commit)
+	uv run bandit -c pyproject.toml -r src/ tests/
+	pre-commit run gitleaks --all-files
 
 fmt: ## Format code (ruff fix + black)
 	uv run ruff check --fix src/ tests/
 	uv run black src/ tests/
 
-check: fmt lint test ## Run all checks: format, lint, then test
+check: fmt lint security test ## Run all checks: format, lint, security, then test
 
 # ── Run ───────────────────────────────────────
 
