@@ -1,0 +1,218 @@
+# Trigger: every push to main, every PR (opened / updated / reopened)
+
+# Pipeline stages and execution order:
+# - In parallel:
+#   - Lint
+#   - Security
+# - test (runs only when lint + security both pass)
+# - build + scan + sbom (PRs only; image is built, scanned, then catalogued)
+
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Coverage threshold — pytest fails if line coverage drops below this.
+  COVERAGE_THRESHOLD: "40"
+
+# Deny all permissions globally; each job re-declares only what it needs.
+permissions: {}
+
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════
+  # Stage 1a — Code Quality
+  # Fast static analysis: style, formatting, and types.
+  # Runs in parallel with the security stage.
+  # ════════════════════════════════════════════════════════════
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # SHA-pinned as a demonstration of supply-chain best practice.
+      # As this is a side project I will stick to tag version for the others.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      # Cache the uv package store so repeated runs skip re-downloading packages.
+      # Key includes the lockfile hash — any dependency change busts the cache.
+      - name: Cache uv packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      # Ruff handles both linting and formatting.
+      - name: Ruff — linting
+        run: uv run ruff check src/ tests/
+
+      - name: Ruff — formatting check
+        run: uv run ruff format --check src/ tests/
+
+      - name: MyPy — type checking
+        run: uv run mypy src/ --ignore-missing-imports
+
+
+  # ════════════════════════════════════════════════════════════
+  # Stage 1b — Security Scanning
+  # Runs in parallel with lint. Two scanners:
+  #   • Gitleaks - finds secrets / credentials accidentally committed
+  #   • Bandit   - SAST for Python security anti-patterns
+  #
+  # Pre-commit hooks can be bypassed with --no-verify; this stage cannot.
+  # ════════════════════════════════════════════════════════════
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      # fetch-depth: 0 gives Gitleaks the full commit history so it scans
+      # every commit in the branch, not just the latest snapshot.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Cache uv packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      # Bandit flags dangerous patterns: shell injection, weak crypto, hardcoded
+      # credentials, use of assert in non-test code, etc.
+      # Config lives in pyproject.toml under [tool.bandit].
+      - name: Bandit — static application security testing
+        run: |
+          uv run bandit -c pyproject.toml -r src/ tests/ \
+            -f json -o bandit-report.json \
+            --exit-zero-on-skipped
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 30
+
+
+  # ════════════════════════════════════════════════════════════
+  # Stage 2 — Tests
+  # Uses a real PostgreSQL service container, no DB mocking.
+  # ════════════════════════════════════════════════════════════
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: preview_test
+          POSTGRES_PASSWORD: preview_test
+          POSTGRES_DB: snapenv_test
+        ports:
+          - 5432:5432
+        # Health check prevents the test runner from starting before
+        # PostgreSQL is ready to accept connections.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Cache uv packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Run tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: preview_test
+          POSTGRES_PASSWORD: preview_test
+          POSTGRES_DB: snapenv_test
+        # --cov-fail-under exits non-zero if coverage drops below the threshold,
+        # failing this step and blocking the build stage from running.
+        run: |
+          uv run pytest \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=${{ env.COVERAGE_THRESHOLD }} \
+            --junitxml=results.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+      # JUnit results power GitHub's native test summary UI in the PR checks tab.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: results.xml
+          retention-days: 30
