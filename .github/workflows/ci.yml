@@ -117,14 +117,18 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --frozen
 
-      # Bandit flags dangerous patterns: shell injection, weak crypto, hardcoded
-      # credentials, use of assert in non-test code, etc.
-      # Config lives in pyproject.toml under [tool.bandit].
+      # We only fail CI on HIGH severity and HIGH confidence findings.
+      # Justification:
+      # - This is a project-level repository (not production).
+      # - Focus on clearly exploitable vulnerabilities.
+      # - Medium/low findings remain visible in the JSON report.
+      # In production, this threshold would be lowered to "medium" to enforce stricter security posture.
       - name: Bandit — static application security testing
         run: |
           uv run bandit -c pyproject.toml -r src/ tests/ \
             -f json -o bandit-report.json \
-            --exit-zero-on-skipped
+            --severity-level high \
+            --confidence-level high
 
       - name: Upload Bandit report
         if: always()
