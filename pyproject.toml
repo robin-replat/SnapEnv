@@ -28,8 +28,6 @@ dependencies = [
     "structlog>=24.4.0",
     "python-dotenv>=1.0.0",
     "psycopg2-binary>=2.9.11",
-    "black>=26.1.0",
-    "mypy>=1.19.1",
 ]
 
 [dependency-groups]
@@ -40,7 +38,6 @@ dev = [
     "factory-boy>=3.3.0",
     "httpx>=0.27.0",
     "ruff>=0.6.0",
-    "black>=24.8.0",
     "mypy>=1.11.0",
     "bandit>=1.8.0",
     "pre-commit>=3.8.0",
@@ -73,10 +70,6 @@ select = [
 "tests/**" = ["S101"]  # assert is expected in tests
 "src/api/**" = ["B008"]  # FastAPI uses Depends() and Query() in defaults by design
 "src/models/entities.py" = ["UP042"]  # StrEnum breaks SQLAlchemy Enum() columns
-
-[tool.black]
-line-length = 110
-target-version = ["py312"]
 
 [tool.mypy]
 python_version = "3.12"

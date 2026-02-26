@@ -21,12 +21,6 @@ repos:
         args: [--fix]       # Auto-fix what it can
       - id: ruff-format     # Ruff's built-in formatter
 
-  # Black: code formatting (deterministic, no debates about style)
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

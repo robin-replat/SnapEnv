@@ -50,9 +50,9 @@ security: ## Run secret scanning (gitleaks via pre-commit)
 	uv run bandit -c pyproject.toml -r src/ tests/
 	pre-commit run gitleaks --all-files
 
-fmt: ## Format code (ruff fix + black)
+fmt: ## Format code (ruff fix + ruff format)
 	uv run ruff check --fix src/ tests/
-	uv run black src/ tests/
+	uv run ruff format src/ tests/
 
 check: fmt lint security test ## Run all checks: format, lint, security, then test
 
