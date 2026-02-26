@@ -25,7 +25,6 @@ from src.api.main import app
 from src.models.database import get_db
 from src.models.entities import Base
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -42,7 +41,7 @@ async def engine_test(postgres_container):
     # testcontainers returns a sync URL like postgresql+psycopg2://...
     # We need to replace it with postgresql+asyncpg://...
     db_url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
-    
+
     # NullPool: each operation gets a fresh connection, no pooling.
     # Slightly slower but eliminates all "another operation in progress" errors.
     engine = create_async_engine(
