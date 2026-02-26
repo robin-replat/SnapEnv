@@ -141,7 +141,7 @@ jobs:
 
   # ════════════════════════════════════════════════════════════
   # Stage 2 — Tests
-  # Uses a real PostgreSQL service container, no DB mocking.
+  # Uses Testcontainers to spin up an ephemeral PostgreSQL database.
   # ════════════════════════════════════════════════════════════
   test:
     name: Tests
@@ -149,23 +149,6 @@ jobs:
     needs: [lint, security]
     permissions:
       contents: read
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: preview_test
-          POSTGRES_PASSWORD: preview_test
-          POSTGRES_DB: snapenv_test
-        ports:
-          - 5432:5432
-        # Health check prevents the test runner from starting before
-        # PostgreSQL is ready to accept connections.
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -188,12 +171,6 @@ jobs:
         run: uv sync --dev --frozen
 
       - name: Run tests
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: preview_test
-          POSTGRES_PASSWORD: preview_test
-          POSTGRES_DB: snapenv_test
         # --cov-fail-under exits non-zero if coverage drops below the threshold,
         # failing this step and blocking the build stage from running.
         run: |
