@@ -16,8 +16,9 @@ htmlcov/
 .pytest_cache
 .ruff_cache
 
-# Environment variables
+# Environment variables or local files
 .env
+*.local*
 
 # Others
 .vscode

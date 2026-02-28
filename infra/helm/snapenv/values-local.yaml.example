@@ -1,0 +1,14 @@
+# values-local.yaml.example — copy this to values-local.yaml and fill in your values.
+#
+# values-local.yaml is gitignored. This .example file is committed so that
+# new developers know what to create. Generate it automatically with:
+#
+#   make helm-secrets      ← reads your .env and writes values-local.yaml
+#
+# Or fill it in manually:
+
+postgresql:
+  auth:
+    username: "your-db-user"
+    password: "your-db-password"
+    database: snapenv

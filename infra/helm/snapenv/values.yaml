@@ -1,0 +1,68 @@
+# values.yaml — default configuration for the SnapEnv Helm chart.
+#
+# These values can be overridden at deploy time:
+#   helm install snapenv ./infra/helm/snapenv --set image.tag=pr-42-abc1234
+#
+# In the GitOps workflow, ArgoCD will override these values per-environment.
+
+# ── Application ───────────────────────────────
+replicaCount: 1
+
+image:
+  repository: ghcr.io/robin-replat/snapenv
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# ── Service ───────────────────────────────────
+service:
+  type: ClusterIP  # Internal-only (Ingress handles external access)
+  port: 8000
+
+# ── Ingress ───────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: snapenv.localhost  # Works out of the box with k3d
+
+# ── Resources ─────────────────────────────────
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# ── Health checks ─────────────────────────────
+healthCheck:
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+# ── Database ──────────────────────────────────
+# IMPORTANT: username and password are intentionally empty here.
+# This file is committed to Git — credentials must NEVER be committed.
+#
+# For local/k3d: run `make helm-secrets` to generate
+#   infra/helm/snapenv/values-local.yaml from your .env file (gitignored).
+# For production (ArgoCD): use Sealed Secrets or External Secrets Operator.
+postgresql:
+  enabled: true
+  auth:
+    # If existingSecret is set, Helm will not create a new Secret.
+    # It will use the specified Secret for database credentials.
+    existingSecret: ""
+    username: ""     # Override via values-local.yaml — run: make helm-secrets
+    password: ""     # Override via values-local.yaml — run: make helm-secrets
+    database: snapenv
+
+# ── Application environment variables ─────────
+# NOTE: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB are intentionally
+# absent here. They are defined once in postgresql.auth above and injected
+# into both containers via the Secret created by secret.yaml.
+# Only non-sensitive config belongs here.
+env:
+  POSTGRES_HOST: ""  # Defaults to {{ .Release.Name }}-postgresql if empty
+  POSTGRES_PORT: "5432"
+  DEBUG: "true"
+  LOG_LEVEL: "DEBUG"

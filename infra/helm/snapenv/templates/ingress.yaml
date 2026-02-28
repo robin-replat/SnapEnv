@@ -1,0 +1,28 @@
+# ingress.yaml — routes external HTTP traffic to the API Service.
+#
+# Ingress allow service to be reachable outside the cluster.
+# Ingress will redirect to ingress controller so when someone
+# requests snapenv.localhost, it sends the traffic to the snapenv-api
+# Service on port 8000.
+
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-api
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

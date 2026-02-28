@@ -1,0 +1,34 @@
+# k3d-config.yaml
+# Configuration for the local k3d Kubernetes cluster.
+#
+# k3d creates a k3s cluster (lightweight Kubernetes) inside Docker containers.
+# This config sets up:
+# - 1 server node (control plane)
+# - Port mapping to access services from browser
+# - Disables the default traefik ingress (use nginx instead)
+
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: snapenv
+servers: 1
+agents: 0  # No separate worker nodes (server node runs everything)
+
+ports:
+  # Map host port 80 → container port 80 on the load balancer.
+  # So can access http://snapenv.localhost from browser.
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  # Map host port 443 for HTTPS (useful later)
+  - port: 443:443
+    nodeFilters:
+      - loadbalancer
+
+options:
+  k3s:
+    extraArgs:
+      # Disable traefik (k3s default ingress) to use nginx ingress instead.
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*

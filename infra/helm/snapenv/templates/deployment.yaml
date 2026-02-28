@@ -1,0 +1,78 @@
+# deployment.yaml — tells Kubernetes HOW to run your application.
+#
+# A Deployment manages a set of identical Pods (running containers).
+# It handles:
+# - Starting the right number of replicas
+# - Rolling updates (zero-downtime deploys)
+# - Restarting crashed containers automatically
+#
+# {{ .Values.xxx }} references values from values.yaml.
+# {{ .Release.Name }} is the Helm release name (e.g., "snapenv").
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    app: {{ .Release.Name }}
+    component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    # The Deployment manages Pods that match these labels.
+    matchLabels:
+      app: {{ .Release.Name }}
+      component: api
+  template:
+    # This is the Pod template — the blueprint for each replica.
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          # ── Credentials from Secret (single source of truth) ──────────────
+          # Pulls POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB from the
+          # Secret created by secret.yaml. Credentials are never written
+          # in plain text inside the pod spec.
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-db-credentials" .Release.Name) }}
+          # ── Non-sensitive configuration from values.yaml ────────────────
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.env.POSTGRES_HOST | default (printf "%s-postgresql" .Release.Name) | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.env.POSTGRES_PORT | default "5432" | quote }}
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "POSTGRES_HOST") (ne $key "POSTGRES_PORT") }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+          # Resource limits prevent one Pod from consuming all cluster resources
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # Readiness probe: K8s only sends traffic to this Pod
+          # once it responds 200 on /health.
+          # Without this, users would hit the Pod before it's ready.
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.periodSeconds }}
+          # Liveness probe: K8s restarts the Pod if it stops responding.
+          # Catches cases where the process is alive but deadlocked.
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30

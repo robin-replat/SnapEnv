@@ -1,0 +1,33 @@
+# project.yaml — ArgoCD AppProject for SnapEnv.
+#
+# An AppProject is a security boundary inside ArgoCD.
+# It controls what Applications within this project are allowed to do:
+# - Which Git repositories they can pull manifests from
+# - Which namespaces they can deploy into
+# - Which Kubernetes resource types they can create
+#
+# Permissions here are scoped to what SnapEnv actually needs:
+# - Only the project GitHub repository as a source
+# - Only snapenv-* namespaces and default as deploy targets
+# - Only Namespace as a cluster-scoped resource (everything else
+#   is namespace-scoped and handled by the destination rules)
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: snapenv
+  namespace: argocd
+spec:
+  description: SnapEnv — Ephemeral preview environments platform
+  sourceRepos:
+    - 'https://github.com/robin-replat/SnapEnv.git'
+  destinations:
+    - namespace: 'snapenv-*'
+      server: 'https://kubernetes.default.svc'
+    - namespace: 'default'
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    # Namespace is the only cluster-scoped resource we need to create
+    # (ArgoCD creates namespaces for preview environments via CreateNamespace=true).
+    - group: ''
+      kind: Namespace

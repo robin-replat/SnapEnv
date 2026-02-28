@@ -1,0 +1,27 @@
+# service.yaml — creates a stable internal DNS name for the API Pods.
+#
+# Pods are ephemeral. They get new IPs when restarted.
+# A Service provides a fixed DNS name (e.g., "snapenv-api") that
+# automatically routes traffic to healthy Pods.
+#
+# ClusterIP = only accessible within the cluster.
+# The Ingress handles external access.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    app: {{ .Release.Name }}
+    component: api
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http
+  # Route traffic to Pods matching these labels
+  selector:
+    app: {{ .Release.Name }}
+    component: api

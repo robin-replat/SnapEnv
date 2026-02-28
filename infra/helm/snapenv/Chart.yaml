@@ -1,0 +1,6 @@
+apiVersion: v2
+name: snapenv
+description: Helm chart for the SnapEnv preview platform
+type: application
+version: 0.1.0      # Chart version (the chart packaging itself)
+appVersion: "0.1.0"  # Application version (your Python app)
