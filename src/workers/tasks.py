@@ -13,6 +13,7 @@ Task flow:
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from celery.exceptions import Retry
 from sqlalchemy import create_engine, select
@@ -68,8 +69,8 @@ def get_sync_session() -> Session:
     return session_factory()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
-def process_pr_event(self, pr_id: str, action: str) -> dict:
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)  # type: ignore[untyped-decorator]
+def process_pr_event(self: Any, pr_id: str, action: str) -> dict[str, str]:
     """Process a GitHub PR event.
 
     This is the entry point task, triggered by the webhook handler.
@@ -96,8 +97,8 @@ def process_pr_event(self, pr_id: str, action: str) -> dict:
         raise self.retry(exc=exc) from exc
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def deploy_preview_environment(self, pr_id: str) -> dict:
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
+def deploy_preview_environment(self: Any, pr_id: str) -> dict[str, str]:
     """Deploy a preview environment for a pull request.
 
     Steps:
@@ -179,8 +180,8 @@ def deploy_preview_environment(self, pr_id: str) -> dict:
         session.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def destroy_preview_environment(self, pr_id: str) -> dict:
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
+def destroy_preview_environment(self: Any, pr_id: str) -> dict[str, str]:
     """Destroy a preview environment when a PR is closed or merged.
 
     Steps:
@@ -237,8 +238,8 @@ def destroy_preview_environment(self, pr_id: str) -> dict:
         session.close()
 
 
-@celery_app.task(bind=True, max_retries=20, default_retry_delay=15)
-def poll_deployment_status(self, pr_id: str, app_name: str) -> dict:
+@celery_app.task(bind=True, max_retries=20, default_retry_delay=15)  # type: ignore[untyped-decorator]
+def poll_deployment_status(self: Any, pr_id: str, app_name: str) -> dict[str, str]:
     """Poll ArgoCD until the preview environment is healthy or failed.
 
     This task retries every 15 seconds, up to 20 times (5 minutes total).
@@ -281,7 +282,7 @@ def poll_deployment_status(self, pr_id: str, app_name: str) -> dict:
                 env.status = EnvironmentStatus.FAILED
                 session.add(
                     Event(
-                        event_type=EventType.DEPLOY_FAILED,
+                        event_type=EventType.ENV_FAILED,
                         message=f"Deployment failed for {app_name}: {status}",
                         pull_request_id=env.pull_request_id,
                     )

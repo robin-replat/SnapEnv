@@ -67,7 +67,6 @@ class Settings(BaseSettings):
     argocd_token: str = ""
 
     # ── Preview environments ──────────────────────
-    preview_domain: str = "preview.localhost"
     # Helm chart path inside the Git repo
     helm_chart_path: str = "infra/helm/snapenv"
 

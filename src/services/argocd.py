@@ -11,7 +11,7 @@ ArgoCD then handles the actual K8s deployment, monitoring, and reconciliation.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -112,7 +112,7 @@ class ArgocdService:
 
             response.raise_for_status()
             logger.info("ArgoCD application created/updated: %s", app_name)
-            return response.json()
+            return cast(dict[str, Any], response.json())
 
         except httpx.HTTPError as exc:
             logger.error("ArgoCD API error: %s", exc)
@@ -162,9 +162,12 @@ class ArgocdService:
                 return "Missing"
 
             response.raise_for_status()
-            data = response.json()
+            data = cast(dict[str, Any], response.json())
 
-            health = data.get("status", {}).get("health", {}).get("status", "Unknown")
+            health = cast(
+                str,
+                data.get("status", {}).get("health", {}).get("status", "Unknown"),
+            )
             sync = data.get("status", {}).get("sync", {}).get("status", "Unknown")
 
             logger.info("ArgoCD app %s: health=%s sync=%s", app_name, health, sync)
