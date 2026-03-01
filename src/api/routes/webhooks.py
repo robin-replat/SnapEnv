@@ -55,11 +55,14 @@ def verify_github_signature(payload: bytes, signature: str, secret: str) -> bool
         logger.warning("Webhook secret not configured, skipping signature verification")
         return True
 
-    expected = "sha256=" + hmac.new(
-        secret.encode("utf-8"),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            secret.encode("utf-8"),
+            payload,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     return hmac.compare_digest(expected, signature)
 
@@ -151,16 +154,18 @@ async def github_webhook(
             )
             db.add(pr)
 
-        # Create a pipeline record for this event
+        # Flush to ensure pr.id is populated before creating related records
+        await db.flush()
+
+        # Now pr.id is guaranteed to be set
         if action in ("opened", "synchronize", "reopened"):
             pipeline = Pipeline(
-                pull_request_id=pr.id if pr.id else None,
+                pull_request_id=pr.id,
                 commit_sha=pr_data["head"]["sha"],
                 status=PipelineStatus.PENDING,
             )
             db.add(pipeline)
 
-        # Log the event
         event_type_map = {
             "opened": EventType.PR_OPENED,
             "synchronize": EventType.PR_UPDATED,
@@ -170,7 +175,7 @@ async def github_webhook(
         db.add(Event(
             event_type=event_type_map.get(action, EventType.PR_UPDATED),
             message=f"PR #{pr_number} {action}: {pr_data['title']}",
-            pull_request_id=pr.id if pr.id else None,
+            pull_request_id=pr.id,
         ))
 
         await db.commit()
