@@ -44,6 +44,32 @@ class Settings(BaseSettings):
     postgres_password: str
     postgres_db: str = "preview_platform"
 
+    # ── Redis ─────────────────────────────────────
+    # Redis serves two roles:
+    # 1. Celery message broker (task queue)
+    # 2. Celery result backend (task status/results)
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+
+    # ── GitHub ────────────────────────────────────
+    # Webhook secret: used to verify that incoming webhooks
+    # are genuinely from GitHub (HMAC-SHA256 signature).
+    github_webhook_secret: str = ""
+    # Personal access token: used to call the GitHub API
+    # (read PR status, pipeline results, etc.)
+    github_token: str = ""
+    # The repository this instance monitors (owner/repo format)
+    github_repository: str = ""
+
+    # ── ArgoCD ────────────────────────────────────
+    argocd_server: str = "https://localhost:8080"
+    argocd_token: str = ""
+
+    # ── Preview environments ──────────────────────
+    # Helm chart path inside the Git repo
+    helm_chart_path: str = "infra/helm/snapenv"
+
     @property
     def database_url(self) -> str:
         """Async connection URL (used by the FastAPI app).
@@ -66,6 +92,11 @@ class Settings(BaseSettings):
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def redis_url(self) -> str:
+        """Redis connection URL for Celery."""
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 @lru_cache  # Singleton: config is loaded once and then cached

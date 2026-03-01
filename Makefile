@@ -7,7 +7,7 @@ help: ## Show this help
 
 dev: ## Install dev dependencies and setup pre-commit hooks
 	uv sync --dev
-	pre-commit install
+	uv run pre-commit install --install-hooks
 
 helm-secrets: ## Generate values-local.yaml from .env for local Helm deployments
 	@echo "Generating infra/helm/snapenv/values-local.yaml from .env..."
@@ -35,7 +35,7 @@ lint: ## Run linters (ruff + mypy + bandit)
 
 security: ## Run secret scanning (gitleaks via pre-commit)
 	uv run bandit -c pyproject.toml -r src/ tests/
-	pre-commit run gitleaks --all-files
+	uv run pre-commit run gitleaks --all-files
 
 fmt: ## Format code (ruff fix + ruff format)
 	uv run ruff check --fix src/ tests/
