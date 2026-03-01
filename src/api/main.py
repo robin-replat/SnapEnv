@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src import __description__, __version__
 from src.api.routes import dashboard, events, pipelines, pull_requests
+from src.api.routes.webhooks import router as webhooks_router
+
 from src.models.config import get_settings
 from src.models.database import init_db
 
@@ -59,6 +61,7 @@ app.include_router(pull_requests.router, prefix="/api/pull-requests", tags=["pul
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
+app.include_router(webhooks_router)
 
 
 @app.get("/health", tags=["system"])
