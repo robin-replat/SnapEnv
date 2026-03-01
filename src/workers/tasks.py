@@ -32,7 +32,6 @@ from src.services.argocd import ArgocdService
 from src.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 _sync_engine: Engine | None = None
 _sync_session_factory: sessionmaker[Session] | None = None
@@ -47,6 +46,7 @@ def get_sync_session_factory() -> sessionmaker[Session]:
     global _sync_engine, _sync_session_factory  # noqa: PLW0603
 
     if _sync_session_factory is None:
+        settings = get_settings()
         _sync_engine = create_engine(
             settings.database_url_sync,
             pool_pre_ping=True,
@@ -108,6 +108,7 @@ def deploy_preview_environment(self: Any, pr_id: str) -> dict[str, str]:
     4. Log an event for the dashboard
     """
     logger.info("Deploying preview environment for PR: %s", pr_id)
+    settings = get_settings()
     session = get_sync_session()
 
     try:

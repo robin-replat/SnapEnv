@@ -35,7 +35,6 @@ from src.models.entities import (
 from src.workers.tasks import process_pr_event
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 router = APIRouter(tags=["webhooks"])
 
@@ -84,6 +83,7 @@ async def github_webhook(
     """
     # Read the raw body for signature verification
     body = await request.body()
+    settings = get_settings()
 
     # Verify signature
     if not verify_github_signature(body, x_hub_signature_256, settings.github_webhook_secret):

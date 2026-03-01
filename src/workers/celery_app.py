@@ -7,19 +7,25 @@ Celery is an async task queue. It works like this:
 4. The worker can take minutes (deploying to K8s) without blocking the API
 """
 
+from os import getenv
+
 from celery import Celery
 
-from src.models.config import get_settings
 
-settings = get_settings()
+def _redis_url() -> str:
+    host = getenv("REDIS_HOST", "localhost")
+    port = getenv("REDIS_PORT", "6379")
+    db = getenv("REDIS_DB", "0")
+    return f"redis://{host}:{port}/{db}"
+
 
 # Create the Celery app.
 # broker: where tasks are queued (Redis)
 # backend: where task results are stored (Redis)
 celery_app = Celery(
     "snapenv",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
+    broker=_redis_url(),
+    backend=_redis_url(),
 )
 
 celery_app.conf.update(

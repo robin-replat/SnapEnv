@@ -17,8 +17,6 @@ import httpx
 
 from src.models.config import get_settings
 
-settings = get_settings()
-
 logger = logging.getLogger(__name__)
 
 
@@ -26,8 +24,10 @@ class ArgocdService:
     """Client for the ArgoCD REST API."""
 
     def __init__(self) -> None:
+        settings = get_settings()
         self.server = settings.argocd_server
         self.token = settings.argocd_token
+        self.preview_domain = settings.preview_domain
         self.headers = {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
@@ -52,7 +52,7 @@ class ArgocdService:
         - Where to deploy (target namespace)
         - How to sync (automated, with pruning and self-healing)
         """
-        preview_host = f"snapenv-pr-{pr_number}.{settings.preview_domain}"
+        preview_host = f"snapenv-pr-{pr_number}.{self.preview_domain}"
 
         application = {
             "metadata": {

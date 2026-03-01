@@ -108,7 +108,3 @@ def get_settings() -> Settings:
     This prevents reloading the .env file on every request.
     """
     return Settings()
-
-
-# Backward-compatible module-level singleton.
-settings = get_settings()
