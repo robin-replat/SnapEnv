@@ -99,6 +99,7 @@ class Settings(BaseSettings):
         """Redis connection URL for Celery."""
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
+
 @lru_cache  # Singleton: config is loaded once and then cached
 def get_settings() -> Settings:
     """Returns the single configuration instance.

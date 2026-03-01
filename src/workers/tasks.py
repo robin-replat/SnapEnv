@@ -13,7 +13,7 @@ Task flow:
 
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
+
 from celery.exceptions import Retry
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
@@ -25,9 +25,6 @@ from src.models.entities import (
     EnvironmentStatus,
     Event,
     EventType,
-    Pipeline,
-    PipelineStatus,
-    PRStatus,
     PullRequest,
 )
 from src.services.argocd import ArgocdService
@@ -96,7 +93,7 @@ def process_pr_event(self, pr_id: str, action: str) -> dict:
 
     except Exception as exc:
         logger.error("Failed to process PR event: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -114,9 +111,7 @@ def deploy_preview_environment(self, pr_id: str) -> dict:
 
     try:
         # Fetch the PR
-        pr = session.execute(
-            select(PullRequest).where(PullRequest.id == pr_id)
-        ).scalar_one_or_none()
+        pr = session.execute(select(PullRequest).where(PullRequest.id == pr_id)).scalar_one_or_none()
 
         if not pr:
             logger.error("PullRequest not found: %s", pr_id)
@@ -160,11 +155,13 @@ def deploy_preview_environment(self, pr_id: str) -> dict:
         pr.preview_url = preview_url
 
         # Log the event
-        session.add(Event(
-            event_type=EventType.DEPLOY_STARTED,
-            message=f"Deploying preview environment for PR #{pr_number}",
-            pull_request_id=pr.id,
-        ))
+        session.add(
+            Event(
+                event_type=EventType.DEPLOY_STARTED,
+                message=f"Deploying preview environment for PR #{pr_number}",
+                pull_request_id=pr.id,
+            )
+        )
 
         session.commit()
 
@@ -177,7 +174,7 @@ def deploy_preview_environment(self, pr_id: str) -> dict:
     except Exception as exc:
         session.rollback()
         logger.error("Failed to deploy preview environment: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
     finally:
         session.close()
 
@@ -196,9 +193,7 @@ def destroy_preview_environment(self, pr_id: str) -> dict:
     session = get_sync_session()
 
     try:
-        pr = session.execute(
-            select(PullRequest).where(PullRequest.id == pr_id)
-        ).scalar_one_or_none()
+        pr = session.execute(select(PullRequest).where(PullRequest.id == pr_id)).scalar_one_or_none()
 
         if not pr:
             logger.error("PullRequest not found: %s", pr_id)
@@ -221,11 +216,13 @@ def destroy_preview_environment(self, pr_id: str) -> dict:
         env.destroyed_at = datetime.now(UTC)
         pr.preview_url = None
 
-        session.add(Event(
-            event_type=EventType.ENV_DESTROYED,
-            message=f"Preview environment destroyed for PR #{pr.github_pr_number}",
-            pull_request_id=pr.id,
-        ))
+        session.add(
+            Event(
+                event_type=EventType.ENV_DESTROYED,
+                message=f"Preview environment destroyed for PR #{pr.github_pr_number}",
+                pull_request_id=pr.id,
+            )
+        )
 
         session.commit()
 
@@ -235,7 +232,7 @@ def destroy_preview_environment(self, pr_id: str) -> dict:
     except Exception as exc:
         session.rollback()
         logger.error("Failed to destroy preview environment: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
     finally:
         session.close()
 
@@ -262,17 +259,19 @@ def poll_deployment_status(self, pr_id: str, app_name: str) -> dict:
 
             if env:
                 env.status = EnvironmentStatus.RUNNING
-                session.add(Event(
-                    event_type=EventType.ENV_READY,
-                    message=f"Preview environment ready: {env.url}",
-                    pull_request_id=env.pull_request_id,
-                ))
+                session.add(
+                    Event(
+                        event_type=EventType.ENV_READY,
+                        message=f"Preview environment ready: {env.url}",
+                        pull_request_id=env.pull_request_id,
+                    )
+                )
                 session.commit()
 
             logger.info("Deployment healthy: %s", app_name)
             return {"status": "healthy", "app_name": app_name}
 
-        elif status in ("Degraded", "Unknown"):
+        if status in ("Degraded", "Unknown"):
             # Deployment failed
             env = session.execute(
                 select(Environment).where(Environment.argocd_app_name == app_name)
@@ -280,20 +279,21 @@ def poll_deployment_status(self, pr_id: str, app_name: str) -> dict:
 
             if env:
                 env.status = EnvironmentStatus.FAILED
-                session.add(Event(
-                    event_type=EventType.DEPLOY_FAILED,
-                    message=f"Deployment failed for {app_name}: {status}",
-                    pull_request_id=env.pull_request_id,
-                ))
+                session.add(
+                    Event(
+                        event_type=EventType.DEPLOY_FAILED,
+                        message=f"Deployment failed for {app_name}: {status}",
+                        pull_request_id=env.pull_request_id,
+                    )
+                )
                 session.commit()
 
             logger.error("Deployment failed: %s status=%s", app_name, status)
             return {"status": "failed", "app_name": app_name}
 
-        else:
-            # Still deploying — retry
-            logger.info("Deployment still in progress: %s status=%s", app_name, status)
-            raise self.retry()
+        # Still deploying — retry
+        logger.info("Deployment still in progress: %s status=%s", app_name, status)
+        raise self.retry()
 
     except self.MaxRetriesExceededError:
         logger.error("Deployment timed out: %s", app_name)
@@ -303,6 +303,6 @@ def poll_deployment_status(self, pr_id: str, app_name: str) -> dict:
             raise
         session.rollback()
         logger.error("Error polling deployment: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
     finally:
         session.close()

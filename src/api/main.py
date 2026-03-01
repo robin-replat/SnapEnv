@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from src import __description__, __version__
 from src.api.routes import dashboard, events, pipelines, pull_requests
 from src.api.routes.webhooks import router as webhooks_router
-
 from src.models.config import get_settings
 from src.models.database import init_db
 

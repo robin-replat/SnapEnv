@@ -28,16 +28,13 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-
     # Timezone
     timezone="UTC",
     enable_utc=True,
-
     # Task behavior
-    task_track_started=True,        # Track when a task starts (not just queued/done)
-    task_acks_late=True,            # Acknowledge task AFTER execution (safer for retries)
-    worker_prefetch_multiplier=1,   # Take one task at a time (our tasks are long-running)
-
+    task_track_started=True,  # Track when a task starts (not just queued/done)
+    task_acks_late=True,  # Acknowledge task AFTER execution (safer for retries)
+    worker_prefetch_multiplier=1,  # Take one task at a time (our tasks are long-running)
     # Auto-discover tasks from this module
     task_routes={
         "src.workers.tasks.*": {"queue": "default"},
