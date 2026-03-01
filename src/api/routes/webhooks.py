@@ -172,11 +172,13 @@ async def github_webhook(
             "closed": EventType.PR_CLOSED,
             "reopened": EventType.PR_REOPENED,
         }
-        db.add(Event(
-            event_type=event_type_map.get(action, EventType.PR_UPDATED),
-            message=f"PR #{pr_number} {action}: {pr_data['title']}",
-            pull_request_id=pr.id,
-        ))
+        db.add(
+            Event(
+                event_type=event_type_map.get(action, EventType.PR_UPDATED),
+                message=f"PR #{pr_number} {action}: {pr_data['title']}",
+                pull_request_id=pr.id,
+            )
+        )
 
         await db.commit()
         await db.refresh(pr)
