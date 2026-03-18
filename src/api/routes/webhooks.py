@@ -32,7 +32,7 @@ from src.models.entities import (
     PRStatus,
     PullRequest,
 )
-from src.workers.tasks import process_pr_event
+from src.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -183,9 +183,12 @@ async def github_webhook(
         await db.commit()
         await db.refresh(pr)
 
-        # Enqueue the async task for processing
-        # This returns immediately — the worker handles the heavy lifting
-        process_pr_event.delay(str(pr.id), action)
+        # Enqueue the async task for processing.
+        # Use task name dispatch to avoid importing worker task modules in API process.
+        celery_app.send_task(
+            "src.workers.tasks.process_pr_event",
+            args=[str(pr.id), action],
+        )
 
     return {
         "status": "accepted",
