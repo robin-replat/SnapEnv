@@ -28,6 +28,7 @@ dependencies = [
     "structlog>=24.4.0",
     "python-dotenv>=1.0.0",
     "psycopg2-binary>=2.9.11",
+    "redis>=6.4.0",
 ]
 
 [dependency-groups]
@@ -84,6 +85,7 @@ addopts = "-v --cov=src --cov-report=term-missing"
 
 [tool.bandit]
 exclude_dirs = [".venv", "build", "dist"]
+skips = ["B105"]  # Covered by ruff S105; avoids false positives on hardcoded test values
 
 [tool.bandit.assert_used]
 skips = ["*_test.py", "test_*.py", "tests/**"]

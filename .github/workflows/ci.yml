@@ -171,6 +171,12 @@ jobs:
         run: uv sync --dev --frozen
 
       - name: Run tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: ci_dummy_user
+          POSTGRES_PASSWORD: ci_dummy_password
+          POSTGRES_DB: ci_dummy_db
         # --cov-fail-under exits non-zero if coverage drops below the threshold,
         # failing this step and blocking the build stage from running.
         run: |

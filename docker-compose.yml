@@ -15,18 +15,72 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_DB=${POSTGRES_DB:-snapenv}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-}
       - DEBUG=true
       - LOG_LEVEL=DEBUG
     depends_on:
       postgres:
         condition: service_healthy      # Wait for DB to be ready
+      redis:
+        condition: service_healthy
     # In development: mount source code for hot reload.
     # Changes to Python files are picked up without rebuilding.
     volumes:
       - ./src:/app/src
     # Override the default CMD for development (adds --reload)
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Celery Worker ───────────────────────────────────
+  # Runs the same codebase as the API, but starts Celery instead of uvicorn.
+  # Processes async tasks: deploy/destroy preview environments, poll statuses.
+  worker:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.api
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-snapenv}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-}
+      - ARGOCD_SERVER=${ARGOCD_SERVER:-https://localhost:8080}
+      - ARGOCD_TOKEN=${ARGOCD_TOKEN:-}
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+    # Start Celery worker instead of the API server.
+    # --loglevel=info: show task execution logs
+    # --concurrency=2: run up to 2 tasks in parallel
+    # -Q default: listen on the "default" queue
+    command: celery -A src.workers.celery_app worker --loglevel=info --concurrency=2 -Q default
+
+  # ── Redis ───────────────────────────────────────────
+  # Message broker for Celery. Tasks are queued here by the API
+  # and picked up by the worker.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # ── Database ────────────────────────────────────────
   postgres:

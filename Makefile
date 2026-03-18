@@ -1,4 +1,4 @@
-.PHONY: help dev up down migrate test lint security fmt check clean helm-secrets
+.PHONY: help dev up down migrate test test-fast test-debug lint security fmt check clean helm-secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -7,7 +7,7 @@ help: ## Show this help
 
 dev: ## Install dev dependencies and setup pre-commit hooks
 	uv sync --dev
-	pre-commit install
+	uv run pre-commit install --install-hooks
 
 helm-secrets: ## Generate values-local.yaml from .env for local Helm deployments
 	@echo "Generating infra/helm/snapenv/values-local.yaml from .env..."
@@ -29,13 +29,19 @@ helm-secrets: ## Generate values-local.yaml from .env for local Helm deployments
 test: ## Run tests with coverage
 	uv run pytest
 
+test-fast: ## Run tests without coverage for faster local feedback
+	uv run pytest --no-cov -q
+
+test-debug: ## Run tests with live output and slow-test timings
+	uv run pytest --no-cov -vv -s --durations=10
+
 lint: ## Run linters (ruff + mypy + bandit)
 	uv run ruff check src/ tests/
 	uv run mypy src/ --ignore-missing-imports
 
 security: ## Run secret scanning (gitleaks via pre-commit)
 	uv run bandit -c pyproject.toml -r src/ tests/
-	pre-commit run gitleaks --all-files
+	uv run pre-commit run gitleaks --all-files
 
 fmt: ## Format code (ruff fix + ruff format)
 	uv run ruff check --fix src/ tests/
