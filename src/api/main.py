@@ -6,13 +6,17 @@ Run with: uvicorn src.api.main:app --reload
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from src import __description__, __version__
 from src.api.routes import dashboard, events, pipelines, pull_requests
+from src.api.routes.websocket import router as websocket_router
 from src.models.config import get_settings
 from src.models.database import init_db
 
@@ -59,6 +63,12 @@ app.include_router(pull_requests.router, prefix="/api/pull-requests", tags=["pul
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
+app.include_router(websocket_router)
+
+
+# Mount static files directory:
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 @app.get("/health", tags=["system"])
@@ -71,3 +81,9 @@ async def health_check() -> dict[str, str]:
     - Load balancers to route traffic only to healthy instances
     """
     return {"status": "healthy"}
+
+
+# Route that serves the dashboard at the root:
+@app.get("/", include_in_schema=False)
+async def serve_dashboard() -> FileResponse:
+    return FileResponse(str(static_dir / "dashboard.html"))

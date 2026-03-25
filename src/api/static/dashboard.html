@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapEnv — Preview Environments Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-icon">S</div>
+                <span>SnapEnv</span>
+            </div>
+            <div class="connection-status">
+                <div class="status-dot" id="ws-status"></div>
+                <span id="ws-label">connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="stats-bar" id="stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Active PRs</div>
+                <div class="stat-value blue" id="stat-active-prs">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Environments Running</div>
+                <div class="stat-value green" id="stat-running-envs">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Deployments Today</div>
+                <div class="stat-value amber" id="stat-deployments">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-value green" id="stat-success-rate">—</div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <section>
+                <div class="section-header">Active Pull Requests</div>
+                <div class="pr-list" id="pr-list">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <p>Loading pull requests...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div class="event-feed">
+                    <div class="event-feed-header">
+                        <span>Live Event Feed</span>
+                        <span class="event-count" id="event-count">0</span>
+                    </div>
+                    <div class="event-list" id="event-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📡</div>
+                            <p>Waiting for events...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // ── State ─────────────────────────────────
+        let events = [];
+        const MAX_EVENTS = 100;
+
+        // ── API calls ─────────────────────────────
+        async function fetchStats() {
+            try {
+                const resp = await fetch('/api/stats');
+                const data = await resp.json();
+                document.getElementById('stat-active-prs').textContent = data.active_prs ?? 0;
+                document.getElementById('stat-running-envs').textContent = data.running_environments ?? 0;
+                document.getElementById('stat-deployments').textContent = data.deployments_today ?? 0;
+                const rate = data.success_rate ?? 0;
+                document.getElementById('stat-success-rate').textContent = rate + '%';
+            } catch (e) {
+                console.error('Failed to fetch stats:', e);
+            }
+        }
+
+        async function fetchPRs() {
+            try {
+                const resp = await fetch('/api/pull-requests?status=open&limit=20');
+                const data = await resp.json();
+                renderPRs(data);
+            } catch (e) {
+                console.error('Failed to fetch PRs:', e);
+            }
+        }
+
+        // ── Renderers ─────────────────────────────
+        function renderPRs(prs) {
+            const container = document.getElementById('pr-list');
+
+            if (!prs || prs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎉</div>
+                        <p>No active PRs. Open a PR to see preview environments!</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = prs.map(pr => `
+                <div class="pr-card">
+                    <div class="pr-header">
+                        <div>
+                            <div class="pr-number">#${pr.github_pr_number}</div>
+                            <div class="pr-title">${escapeHtml(pr.title)}</div>
+                        </div>
+                        <span class="status-badge ${(pr.environment_status || 'pending').toLowerCase()}">
+                            ${pr.environment_status || 'pending'}
+                        </span>
+                    </div>
+                    <div class="pr-meta">
+                        <span>⎇ ${escapeHtml(pr.branch)}</span>
+                        <span>👤 ${escapeHtml(pr.author)}</span>
+                    </div>
+                    ${pr.preview_url && isSafeUrl(pr.preview_url) ? `
+                        <a href="${escapeHtml(pr.preview_url)}" target="_blank" rel="noopener noreferrer" class="preview-link">
+                            ↗ ${escapeHtml(pr.preview_url)}
+                        </a>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function addEvent(event) {
+            events.unshift(event);
+            if (events.length > MAX_EVENTS) events.pop();
+
+            document.getElementById('event-count').textContent = events.length;
+
+            const container = document.getElementById('event-list');
+            const typeClass = getEventTypeClass(event.event_type);
+            const time = new Date(event.timestamp || Date.now()).toLocaleTimeString();
+
+            // Remove empty state if present
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            const el = document.createElement('div');
+            el.className = 'event-item';
+            el.innerHTML = `
+                <span class="event-time">${time}</span>
+                <span class="event-type ${typeClass}">${formatEventType(event.event_type)}</span>
+                <span class="event-message">${escapeHtml(event.message)}</span>
+            `;
+
+            container.prepend(el);
+
+            // Keep list manageable
+            while (container.children.length > MAX_EVENTS) {
+                container.lastChild.remove();
+            }
+        }
+
+        function getEventTypeClass(type) {
+            if (!type) return '';
+            if (type.includes('DEPLOY') || type.includes('ENV_READY')) return 'deploy';
+            if (type.includes('DESTROY')) return 'destroy';
+            if (type.includes('FAIL')) return 'error';
+            return 'pr';
+        }
+
+        function formatEventType(type) {
+            if (!type) return 'EVENT';
+            return type.replace(/_/g, ' ');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function isSafeUrl(url) {
+            try {
+                const parsed = new URL(url);
+                return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+            } catch {
+                return false;
+            }
+        }
+
+        // ── WebSocket ─────────────────────────────
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+
+            ws.onopen = () => {
+                document.getElementById('ws-status').classList.add('connected');
+                document.getElementById('ws-label').textContent = 'live';
+            };
+
+            ws.onclose = () => {
+                document.getElementById('ws-status').classList.remove('connected');
+                document.getElementById('ws-label').textContent = 'reconnecting...';
+                // Reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                document.getElementById('ws-status').classList.remove('connected');
+                document.getElementById('ws-label').textContent = 'error';
+            };
+
+            ws.onmessage = (msg) => {
+                try {
+                    const event = JSON.parse(msg.data);
+                    addEvent(event);
+                    // Refresh data when something changes
+                    fetchStats();
+                    fetchPRs();
+                } catch (e) {
+                    console.error('Failed to parse event:', e);
+                }
+            };
+        }
+
+        // ── Init ──────────────────────────────────
+        fetchStats();
+        fetchPRs();
+        connectWebSocket();
+
+        // Refresh stats every 30 seconds
+        setInterval(fetchStats, 30000);
+        setInterval(fetchPRs, 30000);
+    </script>
+</body>
+</html>
