@@ -13,15 +13,7 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Ruff: linting + import sorting (replaces flake8 + isort)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.0
-    hooks:
-      - id: ruff
-        args: [--fix]       # Auto-fix what it can
-      - id: ruff-format     # Ruff's built-in formatter
-
-  # General file hygiene
+  # General file hygiene (runs before ruff-format so ruff has the final word)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -34,3 +26,11 @@ repos:
         args: [--maxkb=500]
       - id: check-merge-conflict      # Catch unresolved merge conflict markers
       - id: detect-private-key        # Prevent committing private keys
+
+  # Ruff: linting + import sorting + formatting (runs last so it has the final word)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.0
+    hooks:
+      - id: ruff
+        args: [--fix]       # Auto-fix what it can
+      - id: ruff-format     # Ruff's built-in formatter
