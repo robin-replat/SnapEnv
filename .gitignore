@@ -19,6 +19,7 @@ htmlcov/
 # Environment variables or local files
 .env
 *.local*
+terraform.tfvars
 
 # Others
 .vscode
