@@ -20,6 +20,8 @@ htmlcov/
 .env
 *.local*
 terraform.tfvars
+terraform.tfstate
+.terraform
 
 # Others
 .vscode
