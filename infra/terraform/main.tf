@@ -15,6 +15,11 @@ terraform {
       source  = "oracle/oci"
       version = "~> 6.0"
     }
+
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -27,6 +32,21 @@ provider "oci" {
   private_key_path = var.oci_private_key_path
   region           = var.oci_region
 }
+
+# ── Get admin IP ───────────────────────────────────
+# Fetch my public IP address automatically.
+# This calls an external API at plan/apply time so the security rules
+# always match my current IP — no manual updates needed.
+# If my IP changes, run `terraform apply` again.
+data "http" "my_ip" {
+  url = "https://ifconfig.me/ip"
+}
+
+locals {
+  # Trim whitespace and add /32 mask
+  my_ip_cidr = "${trimspace(data.http.my_ip.response_body)}/32"
+}
+
 
 # ── Data Source ───────────────────────────────────
 # Reads information from the cloud without creating anything.
@@ -82,4 +102,67 @@ resource "oci_core_subnet" "snapenv_public" {
   display_name   = "snapenv-public-subnet"
   dns_label      = "public"
   route_table_id = oci_core_route_table.snapenv_rt.id
+  security_list_ids = [oci_core_security_list.snapenv_sl.id]
+}
+
+# Security List — network-level firewall rules.
+# Controls which ports are open for incoming (ingress) and outgoing (egress) traffic.
+# Without these rules, even SSH would be blocked.
+resource "oci_core_security_list" "snapenv_sl" {
+  compartment_id = var.oci_compartment_ocid
+  vcn_id         = oci_core_virtual_network.snapenv_vcn.id
+  display_name   = "snapenv-security-list"
+
+  # ── Outbound: allow everything ──────────────────
+  # The server can reach any external service (apt repos, Docker Hub, GitHub, etc.)
+  # Egress security can be improved but as the current state of the project is a lab dev
+  # I allow everything for convenience. Egress risks come after being compromise (data exfiltration, etc.)
+  egress_security_rules {
+    destination = "0.0.0.0/0"
+    protocol    = "all"
+  }
+
+  # ── Inbound: only specific ports ───────────────
+
+  # SSH (port 22) — remote administration
+  ingress_security_rules {
+    protocol = "6" # 6 = TCP (defined by IANA protocol numbers)
+    source   = local.my_ip_cidr
+    tcp_options {
+      min = 22
+      max = 22
+    }
+  }
+
+  # HTTP (port 80) — Nginx Ingress receives traffic here
+  ingress_security_rules {
+    protocol = "6"
+    source   = "0.0.0.0/0"
+    tcp_options {
+      min = 80
+      max = 80
+    }
+  }
+
+  # HTTPS (port 443) — TLS-encrypted traffic
+  ingress_security_rules {
+    protocol = "6"
+    source   = "0.0.0.0/0"
+    tcp_options {
+      min = 443
+      max = 443
+    }
+  }
+
+  # K8s API (port 6443) — kubectl access from your machine
+  # In a real production setup you'd restrict this to your IP only.
+  # For this project, open to all is acceptable.
+  ingress_security_rules {
+    protocol = "6"
+    source   = local.my_ip_cidr
+    tcp_options {
+      min = 6443
+      max = 6443
+    }
+  }
 }

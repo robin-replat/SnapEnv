@@ -22,3 +22,8 @@ output "subnet_id" {
   description = "ID of the public subnet"
   value       = oci_core_subnet.snapenv_public.id
 }
+
+output "my_public_ip" {
+  description = "My current public IP (used for SSH and K8s API access)"
+  value       = trimspace(data.http.my_ip.response_body)
+}
