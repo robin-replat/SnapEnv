@@ -12,3 +12,13 @@ output "region" {
   description = "OCI region we're connected to"
   value       = var.oci_region
 }
+
+output "vcn_id" {
+  description = "ID of the VCN created"
+  value       = oci_core_virtual_network.snapenv_vcn.id
+}
+
+output "subnet_id" {
+  description = "ID of the public subnet"
+  value       = oci_core_subnet.snapenv_public.id
+}
