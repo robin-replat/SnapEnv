@@ -8,3 +8,8 @@ oci_fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
 oci_private_key_path = "~/.oci/oci_api_key.pem"
 oci_region           = "eu-amsterdam-1"
 oci_compartment_ocid = "ocid1.compartment.oc1..REPLACE_ME"
+
+# ── Instance ──────────────────────────────────────
+instance_ocpus      = 4
+instance_memory_gb  = 24
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"

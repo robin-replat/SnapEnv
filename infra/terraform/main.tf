@@ -57,6 +57,16 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.oci_tenancy_ocid
 }
 
+# Find the latest Oracle Linux 9 ARM image.
+# This data source automatically picks the most recent one.
+data "oci_core_images" "oracle_linux" {
+  compartment_id           = var.oci_compartment_ocid
+  operating_system         = "Oracle Linux"
+  operating_system_version = "9"
+  shape                    = "VM.Standard.A1.Flex"
+  sort_by                  = "TIMECREATED"
+  sort_order               = "DESC"
+}
 
 # ── Network ───────────────────────────────────────
 
@@ -164,5 +174,50 @@ resource "oci_core_security_list" "snapenv_sl" {
       min = 6443
       max = 6443
     }
+  }
+}
+
+# ── Compute Instance ──────────────────────────────
+
+# This creates the actual server — an ARM VM on Oracle Cloud's free tier.
+# The server gets a public IP automatically and SSH key
+# is injected to log in immediately after creation.
+resource "oci_core_instance" "snapenv_server" {
+  compartment_id      = var.oci_compartment_ocid
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  display_name        = "snapenv-server"
+
+  # ARM Ampere A1 Flex — free tier shape
+  shape = "VM.Standard.A1.Flex"
+
+  # How much compute to allocate (within free tier limits)
+  shape_config {
+    ocpus         = var.instance_ocpus
+    memory_in_gbs = var.instance_memory_gb
+  }
+
+  # Network configuration — public subnet place with a public IP
+  create_vnic_details {
+    subnet_id        = oci_core_subnet.snapenv_public.id
+    display_name     = "snapenv-nic"
+    assign_public_ip = true
+    hostname_label   = "snapenv"
+  }
+
+  # OS image — use the latest Oracle Linux 9 ARM image
+  source_details {
+    source_type = "image"
+    source_id   = data.oci_core_images.oracle_linux.images[0].id
+    # 50 GB boot volume (free tier allows up to 200 GB total)
+    boot_volume_size_in_gbs = 50
+  }
+
+  # Inject the SSH public key to be able to connect immediately
+  metadata = {
+    ssh_authorized_keys = file(var.ssh_public_key_path)
+  }
+
+  timeouts {
+    create = "15m"
   }
 }

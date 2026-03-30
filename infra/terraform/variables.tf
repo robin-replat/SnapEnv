@@ -33,3 +33,22 @@ variable "oci_compartment_ocid" {
   description = "OCID of the compartment to create resources in (use tenancy OCID for root)"
   type        = string
 }
+
+# ── Instance ──────────────────────────────────────
+
+variable "instance_ocpus" {
+  description = "Number of OCPUs for the ARM instance (max 4 for free tier)"
+  type        = number
+  default     = 3
+}
+
+variable "instance_memory_gb" {
+  description = "Memory in GB for the ARM instance (max 24 for free tier)"
+  type        = number
+  default     = 16
+}
+
+variable "ssh_public_key_path" {
+  description = "Path to your SSH public key (injected into the server for access)"
+  type        = string
+}

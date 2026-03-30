@@ -27,3 +27,18 @@ output "my_public_ip" {
   description = "My current public IP (used for SSH and K8s API access)"
   value       = trimspace(data.http.my_ip.response_body)
 }
+
+output "server_public_ip" {
+  description = "Public IP of the SnapEnv server"
+  value       = oci_core_instance.snapenv_server.public_ip
+}
+
+output "ssh_command" {
+  description = "Command to SSH into the server"
+  value       = "ssh opc@${oci_core_instance.snapenv_server.public_ip}"
+}
+
+output "dashboard_url" {
+  description = "Dashboard URL via nip.io"
+  value       = "http://snapenv.${oci_core_instance.snapenv_server.public_ip}.nip.io"
+}
