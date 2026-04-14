@@ -66,3 +66,9 @@ env:
   POSTGRES_PORT: "5432"
   DEBUG: "true"
   LOG_LEVEL: "DEBUG"
+
+
+# ── Monitoring ────────────────────────────────
+# This enables the ServiceMonitor resource for Prometheus scraping.
+monitoring:
+  enabled: true

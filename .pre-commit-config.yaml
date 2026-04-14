@@ -21,6 +21,7 @@ repos:
       - id: end-of-file-fixer         # Ensure files end with newline
       - id: check-yaml                # Validate YAML syntax
         args: [--allow-multiple-documents]
+        exclude: ^infra/helm/
       - id: check-json                # Validate JSON syntax
       - id: check-added-large-files   # Prevent accidentally committing large files
         args: [--maxkb=500]

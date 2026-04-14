@@ -1,0 +1,34 @@
+# servicemonitor.yaml — tells Prometheus to scrape this service.
+#
+# A ServiceMonitor is a custom resource from the Prometheus Operator.
+# When the operator sees this resource, it automatically generates
+# a scrape config for Prometheus. No manual Prometheus config needed.
+#
+# How it works:
+# 1. Prometheus Operator watches ServiceMonitor resources cluster-wide
+# 2. This ServiceMonitor says "scrape any Service matching these labels"
+# 3. The label selector matches our API service
+# 4. Prometheus starts scraping the /metrics endpoint every 30 seconds
+
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    app: {{ .Release.Name }}
+    # IMPORTANT: this label must match prometheus's serviceMonitorSelector.
+    # kube-prometheus-stack by default selects ServiceMonitors with
+    # the "release" label matching the Prometheus release name.
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+      component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}

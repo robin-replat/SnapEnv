@@ -19,6 +19,7 @@ htmlcov/
 # Environment variables or local files
 .env
 *.local*
+values-local.yaml
 terraform.tfvars
 terraform.tfstate
 .terraform
