@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __description__, __version__
 from src.api.routes import dashboard, events, pipelines, pull_requests
@@ -54,6 +55,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Instrument the app with Prometheus metrics.
+# This adds a /metrics endpoint that Prometheus will scrape.
+Instrumentator().instrument(app).expose(app)
 
 # Register route modules.
 # Each router handles a group of related endpoints.
