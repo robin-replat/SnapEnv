@@ -1,0 +1,264 @@
+# grafana-dashboard.yaml — Auto-loaded Grafana dashboard.
+#
+# This dashboard is automatically loaded by Grafana via the kube-prometheus-stack sidecar.
+# It watches ConfigMaps labeled "grafana_dashboard: '1'" and imports them as dashboards.
+# Once applied, the dashboard is available in Grafana without any manual import.
+#
+# It follows a GitOps approach where dashboards are defined as code,
+# versioned in Git, and deployed through Helm alongside the application.
+
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboard
+  labels:
+    app: {{ .Release.Name }}
+    # This label is what the Grafana sidecar looks for
+    grafana_dashboard: "1"
+data:
+  snapenv-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 15,
+                "spanNulls": false,
+                "drawStyle": "line",
+                "pointSize": 5,
+                "showPoints": "never"
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"snapenv-api\"}[2m])) by (handler)",
+              "legendFormat": "{{`{{handler}}`}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Error Rate (%)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"snapenv-api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"snapenv-api\"}[5m])) * 100 or vector(0)",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Total Requests",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": null }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(http_requests_total{job=\"snapenv-api\"})",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Request Duration (p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "drawStyle": "line",
+                "showPoints": "never"
+              },
+              "unit": "s"
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket{job=\"snapenv-api\"}[5m])) by (le))",
+              "legendFormat": "p95",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_highr_seconds_bucket{job=\"snapenv-api\"}[5m])) by (le))",
+              "legendFormat": "p50 (median)",
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "title": "Requests by Status Code",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "drawStyle": "bars",
+                "stacking": { "mode": "normal" },
+                "showPoints": "never"
+              },
+              "unit": "reqps"
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"snapenv-api\"}[2m])) by (status)",
+              "legendFormat": "{{`{{status}}`}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Requests by Endpoint",
+          "type": "table",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "handler" },
+                "properties": [{ "id": "displayName", "value": "Endpoint" }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Value" },
+                "properties": [{ "id": "displayName", "value": "Total Requests" }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "sum(http_requests_total{job=\"snapenv-api\"}) by (handler, method)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": { "Time": true },
+                "renameByName": {
+                  "handler": "Endpoint",
+                  "method": "Method",
+                  "Value": "Total Requests"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "title": "API Pod Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "drawStyle": "line",
+                "showPoints": "never"
+              },
+              "unit": "bytes"
+            }
+          },
+          "targets": [
+            {
+              "expr": "container_memory_working_set_bytes{namespace=\"default\",pod=~\"snapenv-api.*\",container=\"api\"}",
+              "legendFormat": "{{`{{pod}}`}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "API Pod CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "drawStyle": "line",
+                "showPoints": "never"
+              },
+              "unit": "percentunit"
+            }
+          },
+          "targets": [
+            {
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"default\",pod=~\"snapenv-api.*\",container=\"api\"}[5m])",
+              "legendFormat": "{{`{{pod}}`}}",
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["snapenv", "api", "monitoring"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "SnapEnv — API Monitoring",
+      "uid": "snapenv-api",
+      "version": 1
+    }
+{{- end }}

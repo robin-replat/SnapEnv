@@ -118,6 +118,13 @@ argocd-ui: ## Open ArgoCD UI (port-forward)
 	@echo ""
 	kubectl port-forward svc/argocd-server -n argocd 8080:443
 
+# ── Grafana ────────────────────────────────
+
+grafana-ui: ## Open Grafana dashboard (port-forward)
+	@echo "Grafana UI: http://localhost:3001"
+	@echo "User: admin / Password: admin"
+	kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
+
 # ── Cleanup ───────────────────────────────────
 
 clean: ## Remove build artifacts and caches
