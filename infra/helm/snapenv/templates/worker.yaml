@@ -1,0 +1,71 @@
+# worker.yaml — Celery worker that processes PR events.
+#
+# Same Docker image as the API, different entrypoint command.
+# Picks up tasks from Redis and calls ArgoCD to manage preview environments.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  labels:
+    app: {{ .Release.Name }}
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - src.workers.celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=2
+            - -Q
+            - default
+          # DB credentials from the shared Secret
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-db-credentials" .Release.Name) }}
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.env.POSTGRES_HOST | default (printf "%s-postgresql" .Release.Name) | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.env.POSTGRES_PORT | default "5432" | quote }}
+            - name: REDIS_HOST
+              value: "{{ .Release.Name }}-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: ARGOCD_SERVER
+              value: "https://argocd-server.argocd.svc.cluster.local"
+            - name: ARGOCD_TOKEN
+              value: {{ .Values.argocd.token | default "" | quote }}
+            - name: GITHUB_TOKEN
+              value: {{ .Values.github.token | default "" | quote }}
+            - name: GITHUB_REPOSITORY
+              value: {{ .Values.github.repository | default "" | quote }}
+            - name: PREVIEW_DOMAIN
+              value: {{ .Values.preview.domain | default "localhost" | quote }}
+            - name: HELM_CHART_PATH
+              value: {{ .Values.preview.helmChartPath | default "infra/helm/snapenv" | quote }}
+            - name: DEBUG
+              value: "true"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

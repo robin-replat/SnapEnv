@@ -64,6 +64,8 @@ postgresql:
 env:
   POSTGRES_HOST: ""  # Defaults to {{ .Release.Name }}-postgresql if empty
   POSTGRES_PORT: "5432"
+  REDIS_HOST: ""    # Defaults to {{ .Release.Name }}-redis if empty
+  REDIS_PORT: "6379"
   DEBUG: "true"
   LOG_LEVEL: "DEBUG"
 
@@ -72,3 +74,18 @@ env:
 # This enables the ServiceMonitor resource for Prometheus scraping.
 monitoring:
   enabled: true
+
+# ── ArgoCD ────────────────────────────────────
+# Token is passed at deploy time via values-local.yaml, not committed.
+argocd:
+  token: ""
+
+# ── GitHub ────────────────────────────────────
+github:
+  token: ""
+  repository: "robin-replat/SnapEnv"
+
+# ── Preview environments ──────────────────────
+preview:
+  domain: "localhost"
+  helmChartPath: "infra/helm/snapenv"

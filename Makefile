@@ -45,11 +45,11 @@ check: fmt lint security test ## Run all checks: format, lint, security, then te
 
 # ── Docker ────────────────────────────────────
 
-up: ## Start all services (API + PostgreSQL)
+up: ## Start all services (API + PostgreSQL + Redis + Worker)
 	docker compose up -d
 
-up-db: ## Start only PostgreSQL (for local dev without Docker API)
-	docker compose up -d postgres
+up-db: ## Start only PostgreSQL + Redis (for local dev without Docker API)
+	docker compose up -d postgres redis
 
 down: ## Stop all services
 	docker compose down
@@ -111,19 +111,16 @@ k8s-status: ## Show status of all K8s resources
 k8s-logs: ## Tail logs from the API pod
 	kubectl logs -f -l app=snapenv,component=api
 
-argocd-ui: ## Open ArgoCD UI (port-forward)
-	@echo "ArgoCD UI: https://localhost:8080"
+argocd-ui: ## Print ArgoCD URL and password (available after make cluster-create)
+	@echo "ArgoCD UI: http://argocd.localhost"
 	@echo "User: admin"
 	@echo "Password: $$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
-	@echo ""
-	kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 # ── Grafana ────────────────────────────────
 
-grafana-ui: ## Open Grafana dashboard (port-forward)
-	@echo "Grafana UI: http://localhost:3001"
+grafana-ui: ## Print Grafana URL (available after make cluster-create)
+	@echo "Grafana UI: http://grafana.localhost"
 	@echo "User: admin / Password: admin"
-	kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
 
 # ── Cleanup ───────────────────────────────────
 

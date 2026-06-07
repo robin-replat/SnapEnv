@@ -50,8 +50,12 @@ spec:
               value: {{ .Values.env.POSTGRES_HOST | default (printf "%s-postgresql" .Release.Name) | quote }}
             - name: POSTGRES_PORT
               value: {{ .Values.env.POSTGRES_PORT | default "5432" | quote }}
+            - name: REDIS_HOST
+              value: {{ .Values.env.REDIS_HOST | default (printf "%s-redis" .Release.Name) | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.env.REDIS_PORT | default "6379" | quote }}
             {{- range $key, $value := .Values.env }}
-            {{- if and (ne $key "POSTGRES_HOST") (ne $key "POSTGRES_PORT") }}
+            {{- if and (ne $key "POSTGRES_HOST") (ne $key "POSTGRES_PORT") (ne $key "REDIS_HOST") (ne $key "REDIS_PORT") }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
