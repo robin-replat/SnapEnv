@@ -1,4 +1,4 @@
-.PHONY: help dev up down migrate test lint security fmt check clean helm-secrets
+.PHONY: help dev migrate test lint security fmt check clean helm-secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -42,26 +42,6 @@ fmt: ## Format code (ruff fix + ruff format)
 	uv run ruff format src/ tests/
 
 check: fmt lint security test ## Run all checks: format, lint, security, then test
-
-# ── Docker ────────────────────────────────────
-
-up: ## Start all services (API + PostgreSQL + Redis + Worker)
-	docker compose up -d
-
-up-db: ## Start only PostgreSQL + Redis (for local dev without Docker API)
-	docker compose up -d postgres redis
-
-down: ## Stop all services
-	docker compose down
-
-logs: ## Tail logs from all services
-	docker compose logs -f
-
-logs-api: ## Tail logs from the API only
-	docker compose logs -f api
-
-rebuild: ## Rebuild images and restart services
-	docker compose up -d --build
 
 # ── Database ──────────────────────────────────
 
