@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     postgres_password: str
     postgres_db: str = "preview_platform"
 
+    # ── Redis ─────────────────────────────────────────────
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
+
     @property
     def database_url(self) -> str:
         """Async connection URL (used by the FastAPI app).
