@@ -48,6 +48,25 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
 
+    # ── GitHub ────────────────────────────────────────────
+    # Set in GitHub repo Settings → Webhooks → Secret.
+    # Leave empty to skip signature validation in local dev.
+    github_webhook_secret: str = ""
+    # Personal access token with repo:write scope (for posting PR comments).
+    github_token: str = ""
+    # owner/repo of the project being previewed (e.g. "acme/my-app").
+    github_repository: str = ""
+
+    # ── ArgoCD ────────────────────────────────────────────
+    # Full URL of the ArgoCD API server (e.g. "http://argocd.localhost").
+    argocd_server: str = ""
+    # ArgoCD API token — create via Settings → Accounts → Generate Token.
+    argocd_token: str = ""
+
+    # ── Preview environment ────────────────────────────────
+    # Path inside the repo to the Helm chart used for preview deployments.
+    helm_chart_path: str = "infra/helm/snapenv"
+
     @property
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"

@@ -6,15 +6,27 @@ The worker pod boots from this module:
 Flow:
   1. GitHub sends a webhook to the API (PR opened / updated / closed)
   2. The API enqueues a Celery task and returns 200 immediately
-  3. This worker picks up the task from Redis and runs the pipeline stages
-     (lint, test, build image, deploy via ArgoCD) asynchronously
-  4. After each stage, the worker writes an Event to the database and the
-     API broadcasts it to connected dashboard WebSocket clients
+  3. This worker picks up the task from Redis and runs the DEPLOY stage:
+     calls ArgoCD to create a preview namespace, posts the URL to GitHub
+  4. The worker writes Events to the database; the API broadcasts them
+     to connected dashboard WebSocket clients
 """
 
+import structlog
 from celery import Celery
+from celery.signals import worker_ready
 
 from src.models.config import get_settings
+from src.models.database import init_db
+
+logger = structlog.get_logger()
+
+
+@worker_ready.connect
+def _on_worker_ready(**_kwargs: object) -> None:
+    """Initialise the async DB engine once the worker has connected to Redis."""
+    init_db()
+    logger.info("worker_db_initialized")
 
 
 def _make_celery() -> Celery:
