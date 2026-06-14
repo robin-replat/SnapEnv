@@ -4,6 +4,7 @@ This is the main file that creates and configures the FastAPI app.
 Run with: uvicorn src.api.main:app --reload
 """
 
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,27 +17,36 @@ from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __description__, __version__
-from src.api.routes import dashboard, events, pipelines, pull_requests
+from src.api.routes import dashboard, events, pipelines, pull_requests, webhooks
 from src.api.routes.websocket import router as websocket_router
 from src.models.config import get_settings
 from src.models.database import init_db
+from src.services.event_service import start_redis_listener
 
 logger = structlog.get_logger()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application startup and shutdown lifecycle.
+    """Manage application startup and shutdown.
 
-    Code before `yield` runs on startup.
-    Code after `yield` runs on shutdown.
-    Used for initializing/closing connections, warming caches, etc.
+    On startup, initialize application settings, prepare the database, and start
+    the Redis Pub/Sub listener used to fan out worker events to WebSocket clients.
+
+    On shutdown, cancel the Redis listener gracefully so the application exits
+    without leaving background tasks running.
     """
     settings = get_settings()
     init_db()
     app.title = settings.app_name
     logger.info("app_starting", app_name=settings.app_name, debug=settings.debug)
+
+    # Bridge: worker publishes to Redis → listener fans out to WebSocket clients.
+    listener = asyncio.create_task(start_redis_listener())
     yield
+
+    listener.cancel()
+    await asyncio.gather(listener, return_exceptions=True)
     logger.info("app_shutting_down")
 
 
@@ -47,7 +57,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# WARNING: CORS: allow the frontend (dashboard) to call the API from a different origin.
+# WARNING: CORS: allow the frontend to call the API from a different origin.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # TODO: restrict in production
@@ -68,6 +78,7 @@ app.include_router(pull_requests.router, prefix="/api/pull-requests", tags=["pul
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 app.include_router(websocket_router)
 
 
