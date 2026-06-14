@@ -2,11 +2,13 @@
 
 The REST endpoint returns historical events.
 The WebSocket endpoint streams events in real time to the dashboard.
+
+broadcast_event and the connected_clients registry live in
+src/services/event_service so the Celery worker can call them
+without importing from the API route layer.
 """
 
 import asyncio
-import json
-from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -16,32 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import Event
 from src.models.database import get_db
 from src.schemas.api import EventResponse
+from src.services.event_service import connected_clients
 
 logger = structlog.get_logger()
 router = APIRouter()
-
-# In-memory set of connected WebSocket clients.
-# For production with multiple workers, could be replaced with Redis pub/sub.
-connected_clients: set[WebSocket] = set()
-
-
-async def broadcast_event(event_data: dict[str, Any]) -> None:
-    """Send an event to all connected WebSocket clients.
-
-    Called by the Celery worker (via an intermediary) whenever
-    a state change occurs (pipeline stage completed, env ready, etc.).
-    """
-    disconnected = set()
-    message = json.dumps(event_data, default=str)
-
-    for ws in connected_clients:
-        try:
-            await ws.send_text(message)
-        except Exception:
-            disconnected.add(ws)
-
-    # Clean up dead connections
-    connected_clients.difference_update(disconnected)
 
 
 @router.get("", response_model=list[EventResponse])
@@ -75,7 +55,6 @@ async def event_websocket(websocket: WebSocket) -> None:
 
     try:
         while True:
-            # Keep connection alive; client can send pings or messages
             await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
     except (TimeoutError, WebSocketDisconnect):
         pass
