@@ -1,4 +1,4 @@
-.PHONY: help dev migrate test lint security fmt check clean helm-secrets
+.PHONY: help dev migrate test lint security fmt check clean helm-secrets provision
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -56,6 +56,16 @@ migration: ## Create a new migration (usage: make migration msg="add users table
 
 run: ## Start the API with hot reload
 	uv run uvicorn src.api.main:app --reload
+
+# ── Ansible ───────────────────────────────────
+
+provision: ## Configure the OCI server after terraform apply (installs k3s, Helm, ingress, monitoring, ArgoCD)
+	@SERVER_IP=$$(cd infra/terraform && terraform output -raw server_public_ip) && \
+	echo "Provisioning $$SERVER_IP..." && \
+	ansible-playbook infra/ansible/provision.yml \
+		-i "$$SERVER_IP," \
+		--extra-vars "server_ip=$$SERVER_IP" \
+		--private-key ~/.ssh/id_rsa
 
 # ── Kubernetes ────────────────────────────────
 
