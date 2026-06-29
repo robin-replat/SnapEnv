@@ -11,17 +11,7 @@ dev: ## Install dev dependencies and setup pre-commit hooks
 
 helm-secrets: ## Generate values-local.yaml from .env for local Helm deployments
 	@echo "Generating infra/helm/snapenv/values-local.yaml from .env..."
-	@python3 -c "\
-	import os; \
-	lines = open('.env').readlines(); \
-	env = {l.split('=',1)[0].strip(): l.split('=',1)[1].strip() for l in lines if '=' in l and not l.startswith('#')}; \
-	f = open('infra/helm/snapenv/values-local.yaml', 'w'); \
-	f.write('postgresql:\n'); \
-	f.write('  auth:\n'); \
-	f.write(f'    username: \"{env.get(\"POSTGRES_USER\", \"snapenv\")}\"\n'); \
-	f.write(f'    password: \"{env.get(\"POSTGRES_PASSWORD\", \"snapenv\")}\"\n'); \
-	f.write(f'    database: \"{env.get(\"POSTGRES_DB\", \"snapenv\")}\"\n'); \
-	f.close()"
+	@python3 scripts/generate_helm_values.py
 	@echo "Done! values-local.yaml created."
 
 # ── Quality ───────────────────────────────────
