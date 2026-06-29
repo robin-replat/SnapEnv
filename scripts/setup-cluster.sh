@@ -76,16 +76,16 @@ kubectl wait --namespace argocd \
   --selector=app.kubernetes.io/name=argocd-server \
   --timeout=180s
 
-# Patch argocd-server to run in HTTP mode so nginx can serve it without TLS passthrough.
-# Without --insecure, argocd-server terminates TLS itself and nginx can't route HTTP traffic to it.
-kubectl patch deployment argocd-server -n argocd \
-  --type=json \
-  --patch='[{"op":"add","path":"/spec/template/spec/containers/0/args","value":["--insecure"]}]'
+# Enable HTTP mode via the params ConfigMap — the documented ArgoCD way to set
+# server flags. Avoids patching the Deployment args directly, which races with
+# pod termination and breaks across ArgoCD versions.
+kubectl patch configmap argocd-cmd-params-cm -n argocd \
+  --type merge \
+  -p '{"data":{"server.insecure":"true"}}'
 
-kubectl wait --namespace argocd \
-  --for=condition=Ready pod \
-  --selector=app.kubernetes.io/name=argocd-server \
-  --timeout=120s
+kubectl rollout restart deployment/argocd-server -n argocd
+echo "Waiting for ArgoCD to restart in HTTP mode..."
+kubectl rollout status deployment/argocd-server -n argocd --timeout=300s
 
 # Create HTTP Ingress for ArgoCD — accessible at http://argocd.localhost
 kubectl apply -f - <<'EOF'

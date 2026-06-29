@@ -78,6 +78,8 @@ monitoring:
 # ── ArgoCD ────────────────────────────────────
 # Token is passed at deploy time via values-local.yaml, not committed.
 argocd:
+  # ArgoCD is installed in HTTP mode inside the private cluster network.
+  server: "http://argocd-server.argocd.svc.cluster.local"
   token: ""
 
 # ── GitHub ────────────────────────────────────

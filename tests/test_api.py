@@ -113,6 +113,42 @@ class TestHealthCheck:
 
 
 # ──────────────────────────────────────────────
+# GitHub Webhook
+# ──────────────────────────────────────────────
+
+
+class TestGitHubWebhook:
+    """Tests for POST /api/webhooks/github."""
+
+    @pytest.mark.asyncio
+    async def test_missing_event_header_returns_json(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A hand-written local curl without GitHub headers should still be JSON."""
+        monkeypatch.setattr(
+            "src.api.routes.webhooks.get_settings",
+            lambda: type("Settings", (), {"github_webhook_secret": ""})(),
+        )
+        payload = {
+            "action": "opened",
+            "pull_request": {
+                "number": 1,
+                "title": "Test PR",
+                "head": {"ref": "feature/test", "sha": "abc123"},
+                "base": {"ref": "main"},
+                "html_url": "https://github.com/test/repo/pull/1",
+            },
+        }
+
+        response = await client.post("/api/webhooks/github", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ignored", "event": None}
+
+
+# ──────────────────────────────────────────────
 # Pull Requests
 # ──────────────────────────────────────────────
 

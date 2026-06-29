@@ -49,7 +49,7 @@ spec:
             - name: REDIS_PORT
               value: "6379"
             - name: ARGOCD_SERVER
-              value: "https://argocd-server.argocd.svc.cluster.local"
+              value: {{ .Values.argocd.server | quote }}
             - name: ARGOCD_TOKEN
               value: {{ .Values.argocd.token | default "" | quote }}
             - name: GITHUB_TOKEN

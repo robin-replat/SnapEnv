@@ -17,16 +17,13 @@ from celery import Celery
 from celery.signals import worker_ready
 
 from src.models.config import get_settings
-from src.models.database import init_db
 
 logger = structlog.get_logger()
 
 
-@worker_ready.connect
+@worker_ready.connect  # type: ignore[untyped-decorator]
 def _on_worker_ready(**_kwargs: object) -> None:
-    """Initialise the async DB engine once the worker has connected to Redis."""
-    init_db()
-    logger.info("worker_db_initialized")
+    logger.info("worker_ready")
 
 
 def _make_celery() -> Celery:

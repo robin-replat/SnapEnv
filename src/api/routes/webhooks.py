@@ -65,7 +65,7 @@ async def github_webhook(
     x_github_event: str | None = Header(None),
     x_hub_signature_256: str | None = Header(None),
     x_github_delivery: str | None = Header(None),
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Receive a GitHub webhook and dispatch the matching Celery task.
 
     GitHub sends this on every PR action (opened, synchronize, closed…).
@@ -83,7 +83,7 @@ async def github_webhook(
 
     logger.info(
         "webhook_received",
-        event=x_github_event,
+        github_event=x_github_event,
         action=action,
         pr=pr_number,
         repo=repo,

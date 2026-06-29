@@ -17,21 +17,23 @@ External integrations (both degrade gracefully when not configured):
                       Set GITHUB_TOKEN to enable.
 
 WebSocket note:
-    connected_clients lives in the API process, not here.
-    broadcast_event() will be a no-op in the worker (empty set), but every
-    event IS persisted to PostgreSQL so the dashboard reads it via REST.
+    Events are persisted to PostgreSQL and published to Redis. API replicas
+    subscribe to Redis and fan them out to their own WebSocket clients.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from src.models.config import get_settings
-from src.models.database import get_session_factory
 from src.models.entities import (
     Environment,
     EnvironmentStatus,
@@ -63,20 +65,36 @@ from src.workers.celery_app import celery_app
 logger = structlog.get_logger()
 
 
+@asynccontextmanager
+async def _worker_db_session() -> AsyncGenerator[AsyncSession, None]:
+    # NullPool: each task opens its own connection and closes it on exit.
+    # Avoids "Future attached to a different loop" — asyncpg connections from
+    # a previous asyncio.run() loop cannot be reused in the next one.
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+    await engine.dispose()
+
+
 # ── Celery task entry points (sync wrappers) ──────────────────────────────────
 
 
-@celery_app.task(name="handle_pr_opened")
+@celery_app.task(name="handle_pr_opened")  # type: ignore[untyped-decorator]
 def handle_pr_opened(payload: dict[str, Any]) -> None:
     asyncio.run(_handle_pr_opened(payload))
 
 
-@celery_app.task(name="handle_pr_updated")
+@celery_app.task(name="handle_pr_updated")  # type: ignore[untyped-decorator]
 def handle_pr_updated(payload: dict[str, Any]) -> None:
     asyncio.run(_handle_pr_updated(payload))
 
 
-@celery_app.task(name="handle_pr_closed")
+@celery_app.task(name="handle_pr_closed")  # type: ignore[untyped-decorator]
 def handle_pr_closed(payload: dict[str, Any]) -> None:
     asyncio.run(_handle_pr_closed(payload))
 
@@ -130,7 +148,7 @@ async def _provision_argocd_app(
         },
     }
 
-    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{settings.argocd_server}/api/v1/applications",
             json=app_body,
@@ -148,7 +166,7 @@ async def _delete_argocd_app(app_name: str) -> None:
         logger.info("argocd_skipped", reason="ARGOCD_SERVER or ARGOCD_TOKEN not set", app=app_name)
         return
 
-    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.delete(
             f"{settings.argocd_server}/api/v1/applications/{app_name}",
             params={"cascade": "true"},
@@ -217,7 +235,7 @@ async def _handle_pr_opened(payload: dict[str, Any]) -> None:
 
     logger.info("handle_pr_opened", pr=pr_number, repo=repo, branch=branch, sha=commit_sha[:7])
 
-    async with get_session_factory()() as db:
+    async with _worker_db_session() as db:
         try:
             # Guard against duplicate execution on Celery retry / re-delivery.
             existing = await db.execute(
@@ -368,7 +386,7 @@ async def _handle_pr_updated(payload: dict[str, Any]) -> None:
 
     logger.info("handle_pr_updated", pr=pr_number, repo=repo, sha=commit_sha[:7])
 
-    async with get_session_factory()() as db:
+    async with _worker_db_session() as db:
         try:
             pr_result = await db.execute(
                 select(PullRequest).where(
@@ -459,7 +477,7 @@ async def _handle_pr_closed(payload: dict[str, Any]) -> None:
 
     logger.info("handle_pr_closed", pr=pr_number, repo=repo, merged=merged)
 
-    async with get_session_factory()() as db:
+    async with _worker_db_session() as db:
         try:
             pr_result = await db.execute(
                 select(PullRequest).where(
