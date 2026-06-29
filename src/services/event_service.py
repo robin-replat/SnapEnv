@@ -61,7 +61,10 @@ async def _publish_to_redis(event_data: dict[str, Any]) -> None:
     roll back the database transaction.
     """
     try:
-        client = aioredis.from_url(get_settings().redis_url, decode_responses=True)
+        client = aioredis.from_url(  # type: ignore[no-untyped-call]
+            get_settings().redis_url,
+            decode_responses=True,
+        )
         await client.publish(REDIS_CHANNEL, json.dumps(event_data, default=str))
         await client.aclose()
     except Exception as exc:
@@ -78,7 +81,10 @@ async def start_redis_listener() -> None:
 
     while True:
         try:
-            client = aioredis.from_url(redis_url, decode_responses=True)
+            client = aioredis.from_url(  # type: ignore[no-untyped-call]
+                redis_url,
+                decode_responses=True,
+            )
             async with client.pubsub() as pubsub:
                 await pubsub.subscribe(REDIS_CHANNEL)
                 logger.info("redis_listener_ready", channel=REDIS_CHANNEL)

@@ -8,8 +8,6 @@ src/services/event_service so the Celery worker can call them
 without importing from the API route layer.
 """
 
-import asyncio
-
 import structlog
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
@@ -55,8 +53,8 @@ async def event_websocket(websocket: WebSocket) -> None:
 
     try:
         while True:
-            await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
-    except (TimeoutError, WebSocketDisconnect):
+            await websocket.receive_text()
+    except WebSocketDisconnect:
         pass
     finally:
         connected_clients.discard(websocket)
