@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     preview_image_repository: str = ""
     # GitHub Actions publishes preview tags to GHCR, so k3d should pull them.
     preview_image_pull_policy: str = "Always"
-    preview_image_pull_secret_name: str = "ghcr-credentials"
+    preview_image_pull_secret_name: str = "ghcr-credentials"  # noqa: S105 - Kubernetes Secret name
     # Temporary contract while previews reuse the SnapEnv chart itself.
     # If left empty, the worker reuses the platform DB credentials.
     preview_postgres_user: str = ""
