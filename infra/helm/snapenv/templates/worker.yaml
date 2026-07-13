@@ -1,0 +1,88 @@
+# worker.yaml — Celery worker that processes PR events.
+#
+# Same Docker image as the API, different entrypoint command.
+# Picks up tasks from Redis and calls ArgoCD to manage preview environments.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  labels:
+    app: {{ .Release.Name }}
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        component: worker
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.registryCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.registryCredentials.name }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - src.workers.celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=2
+            - -Q
+            - default
+          # DB credentials from the shared Secret
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-db-credentials" .Release.Name) }}
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.env.POSTGRES_HOST | default (printf "%s-postgresql" .Release.Name) | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.env.POSTGRES_PORT | default "5432" | quote }}
+            - name: REDIS_HOST
+              value: "{{ .Release.Name }}-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: ARGOCD_SERVER
+              value: {{ .Values.argocd.server | quote }}
+            - name: ARGOCD_TOKEN
+              value: {{ .Values.argocd.token | default "" | quote }}
+            - name: GITHUB_TOKEN
+              value: {{ .Values.github.token | default "" | quote }}
+            - name: GITHUB_REPOSITORY
+              value: {{ .Values.github.repository | default "" | quote }}
+            - name: PREVIEW_DOMAIN
+              value: {{ .Values.preview.domain | default "localhost" | quote }}
+            - name: HELM_CHART_PATH
+              value: {{ .Values.preview.helmChartPath | default "infra/helm/snapenv" | quote }}
+            - name: PREVIEW_IMAGE_REPOSITORY
+              value: {{ .Values.preview.imageRepository | default "" | quote }}
+            - name: PREVIEW_IMAGE_PULL_POLICY
+              value: {{ .Values.preview.imagePullPolicy | default "Always" | quote }}
+            - name: PREVIEW_IMAGE_PULL_SECRET_NAME
+              value: {{ .Values.preview.imagePullSecretName | default "ghcr-credentials" | quote }}
+            - name: GHCR_USERNAME
+              value: {{ .Values.registryCredentials.username | default "" | quote }}
+            - name: GHCR_TOKEN
+              value: {{ .Values.registryCredentials.password | default "" | quote }}
+            - name: DEBUG
+              value: "true"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

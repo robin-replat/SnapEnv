@@ -1,4 +1,4 @@
-.PHONY: help dev up down migrate test lint security fmt check clean helm-secrets
+.PHONY: help dev migrate test lint security fmt check clean helm-secrets provision
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -11,17 +11,7 @@ dev: ## Install dev dependencies and setup pre-commit hooks
 
 helm-secrets: ## Generate values-local.yaml from .env for local Helm deployments
 	@echo "Generating infra/helm/snapenv/values-local.yaml from .env..."
-	@python3 -c "\
-	import os; \
-	lines = open('.env').readlines(); \
-	env = {l.split('=',1)[0].strip(): l.split('=',1)[1].strip() for l in lines if '=' in l and not l.startswith('#')}; \
-	f = open('infra/helm/snapenv/values-local.yaml', 'w'); \
-	f.write('postgresql:\n'); \
-	f.write('  auth:\n'); \
-	f.write(f'    username: \"{env.get(\"POSTGRES_USER\", \"snapenv\")}\"\n'); \
-	f.write(f'    password: \"{env.get(\"POSTGRES_PASSWORD\", \"snapenv\")}\"\n'); \
-	f.write(f'    database: \"{env.get(\"POSTGRES_DB\", \"snapenv\")}\"\n'); \
-	f.close()"
+	@python3 scripts/generate_helm_values.py
 	@echo "Done! values-local.yaml created."
 
 # ── Quality ───────────────────────────────────
@@ -43,26 +33,6 @@ fmt: ## Format code (ruff fix + ruff format)
 
 check: fmt lint security test ## Run all checks: format, lint, security, then test
 
-# ── Docker ────────────────────────────────────
-
-up: ## Start all services (API + PostgreSQL)
-	docker compose up -d
-
-up-db: ## Start only PostgreSQL (for local dev without Docker API)
-	docker compose up -d postgres
-
-down: ## Stop all services
-	docker compose down
-
-logs: ## Tail logs from all services
-	docker compose logs -f
-
-logs-api: ## Tail logs from the API only
-	docker compose logs -f api
-
-rebuild: ## Rebuild images and restart services
-	docker compose up -d --build
-
 # ── Database ──────────────────────────────────
 
 migrate: ## Run database migrations
@@ -76,6 +46,16 @@ migration: ## Create a new migration (usage: make migration msg="add users table
 
 run: ## Start the API with hot reload
 	uv run uvicorn src.api.main:app --reload
+
+# ── Ansible ───────────────────────────────────
+
+provision: ## Configure the OCI server after terraform apply (installs k3s, Helm, ingress, monitoring, ArgoCD)
+	@SERVER_IP=$$(cd infra/terraform && terraform output -raw server_public_ip) && \
+	echo "Provisioning $$SERVER_IP..." && \
+	ansible-playbook infra/ansible/provision.yml \
+		-i "$$SERVER_IP," \
+		--extra-vars "server_ip=$$SERVER_IP" \
+		--private-key ~/.ssh/id_rsa
 
 # ── Kubernetes ────────────────────────────────
 
@@ -111,19 +91,16 @@ k8s-status: ## Show status of all K8s resources
 k8s-logs: ## Tail logs from the API pod
 	kubectl logs -f -l app=snapenv,component=api
 
-argocd-ui: ## Open ArgoCD UI (port-forward)
-	@echo "ArgoCD UI: https://localhost:8080"
+argocd-ui: ## Print ArgoCD URL and password (available after make cluster-create)
+	@echo "ArgoCD UI: http://argocd.localhost"
 	@echo "User: admin"
 	@echo "Password: $$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
-	@echo ""
-	kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 # ── Grafana ────────────────────────────────
 
-grafana-ui: ## Open Grafana dashboard (port-forward)
-	@echo "Grafana UI: http://localhost:3001"
+grafana-ui: ## Print Grafana URL (available after make cluster-create)
+	@echo "Grafana UI: http://grafana.localhost"
 	@echo "User: admin / Password: admin"
-	kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
 
 # ── Cleanup ───────────────────────────────────
 

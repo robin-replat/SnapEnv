@@ -199,7 +199,7 @@
         // ── WebSocket ─────────────────────────────
         function connectWebSocket() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+            const ws = new WebSocket(`${protocol}//${location.host}/api/events/ws`);
 
             ws.onopen = () => {
                 document.getElementById('ws-status').classList.add('connected');

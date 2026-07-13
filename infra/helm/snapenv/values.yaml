@@ -13,6 +13,16 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
+registryCredentials:
+  enabled: false
+  name: ghcr-credentials
+  registry: ghcr.io
+  username: ""
+  password: ""
+  email: ""
+
 # ── Service ───────────────────────────────────
 service:
   type: ClusterIP  # Internal-only (Ingress handles external access)
@@ -64,6 +74,9 @@ postgresql:
 env:
   POSTGRES_HOST: ""  # Defaults to {{ .Release.Name }}-postgresql if empty
   POSTGRES_PORT: "5432"
+  REDIS_HOST: ""    # Defaults to {{ .Release.Name }}-redis if empty
+  REDIS_PORT: "6379"
+  GITHUB_WORKFLOW_NAME: "CI"
   DEBUG: "true"
   LOG_LEVEL: "DEBUG"
 
@@ -72,3 +85,23 @@ env:
 # This enables the ServiceMonitor resource for Prometheus scraping.
 monitoring:
   enabled: true
+
+# ── ArgoCD ────────────────────────────────────
+# Token is passed at deploy time via values-local.yaml, not committed.
+argocd:
+  # ArgoCD is installed in HTTP mode inside the private cluster network.
+  server: "http://argocd-server.argocd.svc.cluster.local"
+  token: ""
+
+# ── GitHub ────────────────────────────────────
+github:
+  token: ""
+  repository: "robin-replat/SnapEnv"
+
+# ── Preview environments ──────────────────────
+preview:
+  domain: "localhost"
+  helmChartPath: "infra/helm/snapenv"
+  imageRepository: ""  # Defaults in the worker to ghcr.io/<github.repository>
+  imagePullPolicy: "Always"
+  imagePullSecretName: ghcr-credentials

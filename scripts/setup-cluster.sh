@@ -4,8 +4,9 @@
 # What this script does:
 # 1. Creates a k3d cluster (K8s running inside Docker)
 # 2. Installs Nginx Ingress Controller (routes external traffic to services)
-# 3. Installs ArgoCD (GitOps continuous deployment)
-# 4. Prints access information
+# 3. Installs kube-prometheus-stack (Prometheus + Grafana)
+# 4. Installs ArgoCD with an HTTP Ingress (no port-forward needed)
+# 5. Prints access information
 #
 # Usage: ./scripts/setup-cluster.sh
 
@@ -21,40 +22,51 @@ echo -e "${CYAN}  SnapEnv — Local Kubernetes Cluster Setup${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
 
 # ── Step 1: Create k3d cluster ────────────────
-echo -e "\n${GREEN}[1/4] Creating k3d cluster '${CLUSTER_NAME}'...${NC}"
+echo -e "\n${GREEN}[1/5] Creating k3d cluster '${CLUSTER_NAME}'...${NC}"
 
-# Delete existing cluster if it exists
 k3d cluster delete ${CLUSTER_NAME} 2>/dev/null || true
-
 k3d cluster create --config k3d-config.yaml
 
 echo "Waiting for cluster to be ready..."
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
 
 # ── Step 2: Install Nginx Ingress Controller ──
-echo -e "\n${GREEN}[2/4] Installing Nginx Ingress Controller...${NC}"
+echo -e "\n${GREEN}[2/5] Installing Nginx Ingress Controller...${NC}"
 
-# Add the ingress-nginx Helm repository
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
-# Install nginx ingress into its own namespace
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
   --set controller.publishService.enabled=true \
   --wait --timeout 120s
 
-echo "Waiting for Ingress Controller to be ready..."
 kubectl wait --namespace ingress-nginx \
   --for=condition=Ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=120s
 
-# ── Step 3: Install ArgoCD ────────────────────
-echo -e "\n${GREEN}[3/4] Installing ArgoCD...${NC}"
+# ── Step 3: Install kube-prometheus-stack ─────
+echo -e "\n${GREEN}[3/5] Installing Prometheus + Grafana (kube-prometheus-stack)...${NC}"
 
-# Create the argocd namespace and install ArgoCD
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# grafana.adminPassword: default login is admin/admin (local cluster only).
+# sidecar.dashboards.searchNamespace=ALL: Grafana picks up dashboard ConfigMaps
+# from any namespace, including the default namespace where our app runs.
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --set grafana.adminPassword=admin \
+  --set grafana.sidecar.dashboards.enabled=true \
+  --set grafana.sidecar.dashboards.searchNamespace=ALL \
+  --wait --timeout 300s
+
+# ── Step 4: Install ArgoCD ────────────────────
+echo -e "\n${GREEN}[4/5] Installing ArgoCD...${NC}"
+
 kubectl create namespace argocd 2>/dev/null || true
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
 
@@ -64,12 +76,52 @@ kubectl wait --namespace argocd \
   --selector=app.kubernetes.io/name=argocd-server \
   --timeout=180s
 
-# ── Step 4: Print access info ─────────────────
-echo -e "\n${GREEN}[4/4] Setup complete!${NC}"
+# Enable HTTP mode via the params ConfigMap — the documented ArgoCD way to set
+# server flags. Avoids patching the Deployment args directly, which races with
+# pod termination and breaks across ArgoCD versions.
+kubectl patch configmap argocd-cmd-params-cm -n argocd \
+  --type merge \
+  -p '{"data":{"server.insecure":"true"}}'
 
-# Get the ArgoCD initial admin password
-# As it is a dev project ArgoCD admin password is printed. It is not the best practice,
-# but it is going to be easier for users.
+# Create a dedicated API-token account for the SnapEnv worker. The built-in
+# admin account keeps UI login only; the worker gets the narrower apiKey path.
+kubectl patch configmap argocd-cm -n argocd \
+  --type merge \
+  -p '{"data":{"accounts.snapenv-worker":"apiKey"}}'
+
+kubectl patch configmap argocd-rbac-cm -n argocd \
+  --type merge \
+  -p '{"data":{"policy.csv":"p, role:snapenv-worker, applications, get, default/*, allow\np, role:snapenv-worker, applications, create, default/*, allow\np, role:snapenv-worker, applications, update, default/*, allow\np, role:snapenv-worker, applications, delete, default/*, allow\np, role:snapenv-worker, applications, sync, default/*, allow\ng, snapenv-worker, role:snapenv-worker\n"}}'
+
+kubectl rollout restart deployment/argocd-server -n argocd
+echo "Waiting for ArgoCD to restart in HTTP mode..."
+kubectl rollout status deployment/argocd-server -n argocd --timeout=300s
+
+# Create HTTP Ingress for ArgoCD — accessible at http://argocd.localhost
+kubectl apply -f - <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: argocd.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
+EOF
+
+# ── Step 5: Print access info ─────────────────
+echo -e "\n${GREEN}[5/5] Setup complete!${NC}"
+
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d)
 
@@ -79,26 +131,21 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 echo "  Kubernetes dashboard:  kubectl get pods -A"
 echo ""
-echo "  ArgoCD UI:"
-echo "    Run:      kubectl port-forward svc/argocd-server -n argocd 8080:443"
-echo "    Open:     https://localhost:8080"
+echo "  ArgoCD UI:             http://argocd.localhost"
 echo "    User:     admin"
 echo "    Password: ${ARGOCD_PASSWORD}"
+echo "    Worker:   snapenv-worker account is ready for API token generation"
+echo ""
+echo "  Grafana UI:            http://grafana.localhost"
+echo "    User:     admin"
+echo "    Password: admin"
 echo ""
 echo "  Next steps:"
 echo "    1. Generate local Helm secrets from your .env file:"
 echo "       make helm-secrets"
 echo ""
-echo "    2. Build and import your Docker image:"
-echo "       docker build -t snapenv:local -f .docker/Dockerfile.api ."
-echo "       k3d image import snapenv:local -c ${CLUSTER_NAME}"
+echo "    2. Build and deploy the app:"
+echo "       make k8s-deploy"
 echo ""
-echo "    3. Deploy the app with Helm:"
-echo "       helm install snapenv ./infra/helm/snapenv \\"
-echo "         -f ./infra/helm/snapenv/values-local.yaml \\"
-echo "         --set image.repository=snapenv \\"
-echo "         --set image.tag=local \\"
-echo "         --set image.pullPolicy=Never"
-echo ""
-echo "    4. Access the app at: http://snapenv.localhost"
+echo "    3. Access the app at: http://snapenv.localhost"
 echo ""

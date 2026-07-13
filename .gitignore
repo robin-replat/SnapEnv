@@ -22,6 +22,7 @@ htmlcov/
 values-local.yaml
 terraform.tfvars
 terraform.tfstate
+terraform.tfstate.backup
 .terraform
 
 # Others

@@ -1,0 +1,10 @@
+# group_vars/all.yml — default variables for all hosts.
+#
+# server_ip is always passed at runtime via --extra-vars (set by make provision).
+
+# SSH connection
+ansible_user: opc
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+# Python interpreter
+ansible_python_interpreter: /usr/bin/python3

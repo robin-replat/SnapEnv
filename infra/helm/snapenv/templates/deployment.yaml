@@ -30,6 +30,13 @@ spec:
         app: {{ .Release.Name }}
         component: api
     spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.registryCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.registryCredentials.name }}
+      {{- end }}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -50,8 +57,12 @@ spec:
               value: {{ .Values.env.POSTGRES_HOST | default (printf "%s-postgresql" .Release.Name) | quote }}
             - name: POSTGRES_PORT
               value: {{ .Values.env.POSTGRES_PORT | default "5432" | quote }}
+            - name: REDIS_HOST
+              value: {{ .Values.env.REDIS_HOST | default (printf "%s-redis" .Release.Name) | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.env.REDIS_PORT | default "6379" | quote }}
             {{- range $key, $value := .Values.env }}
-            {{- if and (ne $key "POSTGRES_HOST") (ne $key "POSTGRES_PORT") }}
+            {{- if and (ne $key "POSTGRES_HOST") (ne $key "POSTGRES_PORT") (ne $key "REDIS_HOST") (ne $key "REDIS_PORT") }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}

@@ -10,7 +10,7 @@
 # 3. The label selector matches our API service
 # 4. Prometheus starts scraping the /metrics endpoint every 30 seconds
 
-{{- if .Values.monitoring.enabled }}
+{{- if and .Values.monitoring.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
