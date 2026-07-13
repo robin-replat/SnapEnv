@@ -96,14 +96,16 @@ sequenceDiagram
 
     Dev->>GH: Opens Pull Request
     GH->>API: POST /api/events (webhook)
-    API->>DB: Create PullRequest record
     API->>Redis: Enqueue handle_pr_opened task
     API-->>GH: 200 OK (immediate)
-
     Redis->>Worker: Deliver task
+    Worker->>DB: Create PullRequest record
 
     Note over GH,Worker: CI runs in GitHub Actions (lint → test → build → push image)
     GH->>GH: GitHub Actions workflow: ruff, pytest, docker build, ghcr.io push
+    GH->>API: POST workflow_run completed/success
+    API->>Redis: Enqueue handle_workflow_completed task
+    Redis->>Worker: Deliver deploy task
 
     Worker->>DB: Create Pipeline (DEPLOY stage only)
     Worker->>DB: Write Event (PIPELINE_STARTED)
@@ -361,6 +363,35 @@ curl http://snapenv.localhost/docs
 | Grafana | http://grafana.localhost | admin / admin |
 | ArgoCD | http://argocd.localhost | `make argocd-ui` prints password |
 
+### Real GitHub events with a local k3d cluster
+
+This is the recommended mode when you do not have a cloud Kubernetes cluster yet:
+GitHub remains the source of webhooks and CI, while SnapEnv and every preview run
+inside your local k3d cluster.
+
+```bash
+# 1. Expose local ingress to GitHub.
+ngrok http 80 --host-header=snapenv.localhost
+
+# 2. Use the generated HTTPS URL as the GitHub webhook Payload URL:
+# https://xxxx.ngrok-free.app/api/webhooks/github
+```
+
+Configure the GitHub webhook with:
+
+- Content type: `application/json`
+- Secret: same value as `GITHUB_WEBHOOK_SECRET`
+- Events: Pull requests and Workflow runs
+
+The CI workflow publishes a multi-arch image to GHCR, so local k3d on amd64 and
+ARM64 nodes can pull the same PR tag. If the GHCR package is private, set
+`GHCR_USERNAME` and `GHCR_TOKEN` in `.env`, then run `make helm-secrets` and
+`make k8s-deploy` again so preview namespaces receive an image pull secret.
+
+For real preview creation, `ARGOCD_TOKEN` must be set. The local cluster setup creates
+a dedicated `snapenv-worker` ArgoCD API account for this token. Without it, the worker
+fails the deployment instead of marking a preview as ready without creating it.
+
 ---
 
 ## Deploying to Production (Oracle Cloud ARM)
@@ -520,12 +551,16 @@ GitHub PR opened
        ▼
 POST /api/webhooks/github   ← nginx ingress → FastAPI
        │  HMAC-SHA256 validated
-       │  handle_pr_opened.delay(payload)
+       │  handle_pr_opened → register PR only
        ▼
-  Redis queue
+GitHub Actions              ← lint, security, tests, multi-arch image push
        │
+       │  workflow_run: completed + success
        ▼
-Celery Worker               ← picks up task asynchronously
+POST /api/webhooks/github
+       │  handle_workflow_completed.delay(payload)
+       ▼
+Celery Worker               ← deploys the exact successful commit
        │  creates DB records, runs pipeline stages
        │  broadcasts events via WebSocket
        ▼
@@ -540,11 +575,12 @@ Go to your repository on GitHub:
 
 ```
 Settings → Webhooks → Add webhook
-  Payload URL:  https://snapenv.<server-ip>.nip.io/api/webhooks/github
-                (or http://snapenv.localhost/api/webhooks/github for local dev)
+  Payload URL:  https://xxxx.ngrok-free.app/api/webhooks/github
+                (or https://snapenv.<server-ip>.nip.io/api/webhooks/github for a remote cluster)
   Content type: application/json
   Secret:       <same value as GITHUB_WEBHOOK_SECRET in your .env>
   Events:       ✓ Pull requests
+                ✓ Workflow runs
 ```
 
 Set the same secret in `.env`:
@@ -559,7 +595,7 @@ Then redeploy so the API picks it up:
 make k8s-deploy
 ```
 
-> **Local dev without a public URL?** Use [ngrok](https://ngrok.com/) to expose your local cluster:
+> **Local k3d needs a public webhook URL.** Use [ngrok](https://ngrok.com/) to expose your local cluster:
 > ```bash
 > ngrok http 80 --host-header=snapenv.localhost
 > # Use the https://xxxx.ngrok-free.app URL as the GitHub webhook Payload URL
@@ -589,7 +625,7 @@ make k8s-logs
 
 ---
 
-### Step 3 — Watch the Worker Process the Task
+### Step 3 — Watch Registration, CI, and Deployment
 
 ```bash
 # Tail worker logs
@@ -597,8 +633,11 @@ kubectl logs -n snapenv -l app=snapenv-worker -f
 
 # Expected output:
 # Task handle_pr_opened[<uuid>] received
-# handle_pr_opened started | PR #42 | repo=owner/repo | branch=feature/foo | sha=abc123
+# handle_pr_opened | PR #42 | repo=owner/repo | branch=feature/foo | sha=abc123
 # handle_pr_opened completed | PR #42
+# ... GitHub Actions completes and pushes the multi-arch image ...
+# Task handle_workflow_completed[<uuid>] received
+# deploy_ci_revision | PR #42 | repo=owner/repo | sha=abc123
 ```
 
 ---
@@ -693,5 +732,11 @@ Every push and pull request runs:
 | `ARGOCD_TOKEN` | — | ArgoCD auth token (worker only) |
 | `GITHUB_TOKEN` | — | GitHub token for PR comments (worker only) |
 | `GITHUB_REPOSITORY` | — | `owner/repo` (worker only) |
+| `GITHUB_WORKFLOW_NAME` | `CI` | Successful workflow allowed to deploy previews |
+| `GHCR_USERNAME` | — | Optional GHCR username for private package pulls in k3d |
+| `GHCR_TOKEN` | — | Optional token with package read access for private GHCR pulls |
 | `PREVIEW_DOMAIN` | `localhost` | Domain for preview environment URLs |
 | `HELM_CHART_PATH` | `infra/helm/snapenv` | Path to the Helm chart used for preview envs |
+| `PREVIEW_IMAGE_REPOSITORY` | `ghcr.io/<GITHUB_REPOSITORY>` | Image repository ArgoCD deploys for previews |
+| `PREVIEW_IMAGE_PULL_POLICY` | `Always` | Pull policy for GitHub-built preview images |
+| `PREVIEW_IMAGE_PULL_SECRET_NAME` | `ghcr-credentials` | Image pull secret name created when GHCR credentials are set |

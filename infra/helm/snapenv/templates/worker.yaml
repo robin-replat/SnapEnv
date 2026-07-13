@@ -22,6 +22,13 @@ spec:
         app: {{ .Release.Name }}
         component: worker
     spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.registryCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.registryCredentials.name }}
+      {{- end }}
       containers:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -60,6 +67,16 @@ spec:
               value: {{ .Values.preview.domain | default "localhost" | quote }}
             - name: HELM_CHART_PATH
               value: {{ .Values.preview.helmChartPath | default "infra/helm/snapenv" | quote }}
+            - name: PREVIEW_IMAGE_REPOSITORY
+              value: {{ .Values.preview.imageRepository | default "" | quote }}
+            - name: PREVIEW_IMAGE_PULL_POLICY
+              value: {{ .Values.preview.imagePullPolicy | default "Always" | quote }}
+            - name: PREVIEW_IMAGE_PULL_SECRET_NAME
+              value: {{ .Values.preview.imagePullSecretName | default "ghcr-credentials" | quote }}
+            - name: GHCR_USERNAME
+              value: {{ .Values.registryCredentials.username | default "" | quote }}
+            - name: GHCR_TOKEN
+              value: {{ .Values.registryCredentials.password | default "" | quote }}
             - name: DEBUG
               value: "true"
           resources:

@@ -9,6 +9,8 @@ Each test follows the Arrange-Act-Assert pattern:
 We test both "happy paths" (normal usage) and "edge cases" (not found, empty, filters).
 """
 
+from unittest.mock import Mock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -146,6 +148,112 @@ class TestGitHubWebhook:
 
         assert response.status_code == 200
         assert response.json() == {"status": "ignored", "event": None}
+
+    @pytest.mark.asyncio
+    async def test_pull_request_opened_only_enqueues_registration(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "src.api.routes.webhooks.get_settings",
+            lambda: type("Settings", (), {"github_webhook_secret": ""})(),
+        )
+        registration_task = Mock()
+        workflow_task = Mock()
+        monkeypatch.setattr("src.api.routes.webhooks.handle_pr_opened", registration_task)
+        monkeypatch.setattr("src.api.routes.webhooks.handle_workflow_completed", workflow_task)
+        payload = {
+            "action": "opened",
+            "pull_request": {"number": 42},
+            "repository": {"full_name": "robin-replat/SnapEnv"},
+        }
+
+        response = await client.post(
+            "/api/webhooks/github",
+            json=payload,
+            headers={"X-GitHub-Event": "pull_request"},
+        )
+
+        assert response.status_code == 200
+        registration_task.delay.assert_called_once_with(payload)
+        workflow_task.delay.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_successful_ci_workflow_enqueues_deployment(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "src.api.routes.webhooks.get_settings",
+            lambda: type(
+                "Settings",
+                (),
+                {"github_webhook_secret": "", "github_workflow_name": "CI"},
+            )(),
+        )
+        workflow_task = Mock()
+        monkeypatch.setattr("src.api.routes.webhooks.handle_workflow_completed", workflow_task)
+        payload = {
+            "action": "completed",
+            "workflow_run": {
+                "name": "CI",
+                "event": "pull_request",
+                "conclusion": "success",
+                "head_sha": "a" * 40,
+                "pull_requests": [{"number": 42}],
+            },
+            "repository": {"full_name": "robin-replat/SnapEnv"},
+        }
+
+        response = await client.post(
+            "/api/webhooks/github",
+            json=payload,
+            headers={"X-GitHub-Event": "workflow_run"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "action": "completed", "pr": "42"}
+        workflow_task.delay.assert_called_once_with(payload)
+
+    @pytest.mark.asyncio
+    async def test_failed_ci_workflow_is_ignored(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "src.api.routes.webhooks.get_settings",
+            lambda: type(
+                "Settings",
+                (),
+                {"github_webhook_secret": "", "github_workflow_name": "CI"},
+            )(),
+        )
+        workflow_task = Mock()
+        monkeypatch.setattr("src.api.routes.webhooks.handle_workflow_completed", workflow_task)
+        payload = {
+            "action": "completed",
+            "workflow_run": {
+                "name": "CI",
+                "event": "pull_request",
+                "conclusion": "failure",
+                "head_sha": "a" * 40,
+                "pull_requests": [{"number": 42}],
+            },
+            "repository": {"full_name": "robin-replat/SnapEnv"},
+        }
+
+        response = await client.post(
+            "/api/webhooks/github",
+            json=payload,
+            headers={"X-GitHub-Event": "workflow_run"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ignored", "event": "workflow_run"}
+        workflow_task.delay.assert_not_called()
 
 
 # ──────────────────────────────────────────────

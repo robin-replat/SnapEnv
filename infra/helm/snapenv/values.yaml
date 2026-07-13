@@ -13,6 +13,16 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
+registryCredentials:
+  enabled: false
+  name: ghcr-credentials
+  registry: ghcr.io
+  username: ""
+  password: ""
+  email: ""
+
 # ── Service ───────────────────────────────────
 service:
   type: ClusterIP  # Internal-only (Ingress handles external access)
@@ -66,6 +76,7 @@ env:
   POSTGRES_PORT: "5432"
   REDIS_HOST: ""    # Defaults to {{ .Release.Name }}-redis if empty
   REDIS_PORT: "6379"
+  GITHUB_WORKFLOW_NAME: "CI"
   DEBUG: "true"
   LOG_LEVEL: "DEBUG"
 
@@ -91,3 +102,6 @@ github:
 preview:
   domain: "localhost"
   helmChartPath: "infra/helm/snapenv"
+  imageRepository: ""  # Defaults in the worker to ghcr.io/<github.repository>
+  imagePullPolicy: "Always"
+  imagePullSecretName: ghcr-credentials

@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     github_token: str = ""
     # owner/repo of the project being previewed (e.g. "acme/my-app").
     github_repository: str = ""
+    # Only successful runs of this workflow are allowed to deploy previews.
+    github_workflow_name: str = "CI"
+    # Optional registry credentials for private GHCR packages in local k3d.
+    ghcr_username: str = ""
+    ghcr_token: str = ""
 
     # ── ArgoCD ────────────────────────────────────────────
     # Full URL of the ArgoCD API server (e.g. "http://argocd.localhost").
@@ -66,10 +71,41 @@ class Settings(BaseSettings):
     # ── Preview environment ────────────────────────────────
     # Path inside the repo to the Helm chart used for preview deployments.
     helm_chart_path: str = "infra/helm/snapenv"
+    # Image repository ArgoCD should deploy for PR previews.
+    # Defaults to ghcr.io/<GITHUB_REPOSITORY in lowercase>.
+    preview_image_repository: str = ""
+    # GitHub Actions publishes preview tags to GHCR, so k3d should pull them.
+    preview_image_pull_policy: str = "Always"
+    preview_image_pull_secret_name: str = "ghcr-credentials"
+    # Temporary contract while previews reuse the SnapEnv chart itself.
+    # If left empty, the worker reuses the platform DB credentials.
+    preview_postgres_user: str = ""
+    preview_postgres_password: str = ""
+    preview_postgres_db: str = ""
 
     @property
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+    @property
+    def resolved_preview_image_repository(self) -> str:
+        if self.preview_image_repository:
+            return self.preview_image_repository
+        if self.github_repository:
+            return f"ghcr.io/{self.github_repository.lower()}"
+        return ""
+
+    @property
+    def resolved_preview_postgres_user(self) -> str:
+        return self.preview_postgres_user or self.postgres_user
+
+    @property
+    def resolved_preview_postgres_password(self) -> str:
+        return self.preview_postgres_password or self.postgres_password
+
+    @property
+    def resolved_preview_postgres_db(self) -> str:
+        return self.preview_postgres_db or self.postgres_db
 
     @property
     def database_url(self) -> str:

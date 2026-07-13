@@ -83,6 +83,16 @@ kubectl patch configmap argocd-cmd-params-cm -n argocd \
   --type merge \
   -p '{"data":{"server.insecure":"true"}}'
 
+# Create a dedicated API-token account for the SnapEnv worker. The built-in
+# admin account keeps UI login only; the worker gets the narrower apiKey path.
+kubectl patch configmap argocd-cm -n argocd \
+  --type merge \
+  -p '{"data":{"accounts.snapenv-worker":"apiKey"}}'
+
+kubectl patch configmap argocd-rbac-cm -n argocd \
+  --type merge \
+  -p '{"data":{"policy.csv":"p, role:snapenv-worker, applications, get, default/*, allow\np, role:snapenv-worker, applications, create, default/*, allow\np, role:snapenv-worker, applications, update, default/*, allow\np, role:snapenv-worker, applications, delete, default/*, allow\np, role:snapenv-worker, applications, sync, default/*, allow\ng, snapenv-worker, role:snapenv-worker\n"}}'
+
 kubectl rollout restart deployment/argocd-server -n argocd
 echo "Waiting for ArgoCD to restart in HTTP mode..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=300s
@@ -124,6 +134,7 @@ echo ""
 echo "  ArgoCD UI:             http://argocd.localhost"
 echo "    User:     admin"
 echo "    Password: ${ARGOCD_PASSWORD}"
+echo "    Worker:   snapenv-worker account is ready for API token generation"
 echo ""
 echo "  Grafana UI:            http://grafana.localhost"
 echo "    User:     admin"

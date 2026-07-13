@@ -21,7 +21,12 @@ import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from src.models.config import get_settings
-from src.workers.tasks import handle_pr_closed, handle_pr_opened, handle_pr_updated
+from src.workers.tasks import (
+    handle_pr_closed,
+    handle_pr_opened,
+    handle_pr_updated,
+    handle_workflow_completed,
+)
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -68,7 +73,7 @@ async def github_webhook(
 ) -> dict[str, str | None]:
     """Receive a GitHub webhook and dispatch the matching Celery task.
 
-    GitHub sends this on every PR action (opened, synchronize, closed…).
+    GitHub sends this on PR actions and workflow run completions.
     We always return 200 — errors are logged, not re-raised, to prevent
     GitHub from retrying events we've already partially processed.
     """
@@ -78,6 +83,9 @@ async def github_webhook(
     payload = json.loads(raw_body)
     action = payload.get("action", "")
     pr = payload.get("pull_request", {})
+    if x_github_event == "workflow_run":
+        workflow_prs = payload.get("workflow_run", {}).get("pull_requests", [])
+        pr = workflow_prs[0] if workflow_prs else {}
     pr_number = pr.get("number")
     repo = payload.get("repository", {}).get("full_name", "unknown")
 
@@ -90,8 +98,28 @@ async def github_webhook(
         delivery=x_github_delivery,
     )
 
+    if x_github_event == "workflow_run":
+        workflow_run = payload.get("workflow_run", {})
+        is_deployable = (
+            action == "completed"
+            and workflow_run.get("name") == get_settings().github_workflow_name
+            and workflow_run.get("event") == "pull_request"
+            and workflow_run.get("conclusion") == "success"
+            and bool(workflow_run.get("pull_requests"))
+        )
+        if not is_deployable:
+            return {"status": "ignored", "event": x_github_event}
+
+        handle_workflow_completed.delay(payload)
+        logger.info(
+            "task_enqueued",
+            task="handle_workflow_completed",
+            pr=pr_number,
+            sha=workflow_run.get("head_sha", "")[:7],
+        )
+        return {"status": "ok", "action": action, "pr": str(pr_number)}
+
     if x_github_event != "pull_request":
-        # We only care about PR events — acknowledge everything else silently.
         return {"status": "ignored", "event": x_github_event}
 
     if action == "opened":

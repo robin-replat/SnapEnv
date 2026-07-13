@@ -15,10 +15,31 @@ Flow:
 import structlog
 from celery import Celery
 from celery.signals import worker_ready
-
-from src.models.config import get_settings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger()
+
+
+class CelerySettings(BaseSettings):
+    """Minimal import-time settings for Celery wiring.
+
+    Importing FastAPI routes imports task objects so webhook handlers can enqueue
+    work. That path must not validate the full application settings, because test
+    collection may override DB dependencies and never touch PostgreSQL.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
 
 
 @worker_ready.connect  # type: ignore[untyped-decorator]
@@ -27,7 +48,7 @@ def _on_worker_ready(**_kwargs: object) -> None:
 
 
 def _make_celery() -> Celery:
-    settings = get_settings()
+    settings = CelerySettings()
 
     app = Celery(
         "snapenv",
