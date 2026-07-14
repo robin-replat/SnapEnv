@@ -7,10 +7,12 @@ A self-hosted platform that automatically creates ephemeral **preview environmen
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 > [!IMPORTANT]
-> **Project status: prototype.** The API and dashboard work, but the full PR-to-preview
-> path is not production-ready yet: image build/push, post-CI deployment, ArgoCD health
-> reconciliation, secrets and orphan cleanup remain to be implemented. See the
-> [complete audit](docs/AUDIT_2026-06-29.md).
+> **Project status: validated local prototype.** The GitHub-to-local-k3d flow works:
+> pull request webhooks register PRs, successful GitHub Actions `workflow_run` events
+> deploy immutable preview images through ArgoCD, and close/merge events tear previews
+> down. It is still not production-hardened: ArgoCD health reconciliation, orphan
+> cleanup, GitHub backfill for missed events, and stronger secret handling are still
+> future work. See the [local k3d audit](docs/LOCAL_K3D_GITHUB_AUDIT_2026-07-13.md).
 
 ---
 
@@ -21,7 +23,7 @@ When a developer opens a Pull Request, SnapEnv:
 1. Receives a GitHub webhook
 2. Lets GitHub Actions run the CI pipeline (lint → test → build image → push to registry)
 3. Creates an isolated Kubernetes namespace and deploys the PR image via ArgoCD
-4. Posts the preview URL to the PR as a comment
+4. Posts the preview URL to the PR as a comment when `GITHUB_TOKEN` is configured
 5. Streams all events in real time to a dashboard
 6. Tears everything down when the PR is closed or merged
 
@@ -65,7 +67,7 @@ graph TB
         end
     end
 
-    GH -- webhook POST /api/events --> NGX --> API
+    GH -- webhook POST /api/webhooks/github --> NGX --> API
     DEV -- dashboard + WebSocket --> NGX --> API
     API -- enqueue task --> RDS
     RDS -- consume task --> WRK
@@ -95,7 +97,7 @@ sequenceDiagram
     participant Dash as Dashboard
 
     Dev->>GH: Opens Pull Request
-    GH->>API: POST /api/events (webhook)
+    GH->>API: POST /api/webhooks/github (pull_request)
     API->>Redis: Enqueue handle_pr_opened task
     API-->>GH: 200 OK (immediate)
     Redis->>Worker: Deliver task
@@ -103,7 +105,7 @@ sequenceDiagram
 
     Note over GH,Worker: CI runs in GitHub Actions (lint → test → build → push image)
     GH->>GH: GitHub Actions workflow: ruff, pytest, docker build, ghcr.io push
-    GH->>API: POST workflow_run completed/success
+    GH->>API: POST /api/webhooks/github (workflow_run completed/success)
     API->>Redis: Enqueue handle_workflow_completed task
     Redis->>Worker: Deliver deploy task
 
@@ -121,7 +123,7 @@ sequenceDiagram
 
     Dev->>Dash: Sees live pipeline + preview URL
     Dev->>GH: Closes / merges PR
-    GH->>API: POST /api/events (webhook)
+    GH->>API: POST /api/webhooks/github (pull_request closed)
     API->>Redis: Enqueue handle_pr_closed task
     Worker->>ArgoCD: Delete Application
     ArgoCD->>ArgoCD: Delete pr-42 namespace
@@ -363,6 +365,11 @@ curl http://snapenv.localhost/docs
 | Grafana | http://grafana.localhost | admin / admin |
 | ArgoCD | http://argocd.localhost | `make argocd-ui` prints password |
 
+The SnapEnv dashboard is a lifecycle dashboard: it shows PR registration,
+deployment status, preview URLs, and event history. It does not show the
+business UI of the previewed application. For infrastructure metrics, use
+Grafana.
+
 ### Real GitHub events with a local k3d cluster
 
 This is the recommended mode when you do not have a cloud Kubernetes cluster yet:
@@ -383,6 +390,10 @@ Configure the GitHub webhook with:
 - Secret: same value as `GITHUB_WEBHOOK_SECRET`
 - Events: Pull requests and Workflow runs
 
+On the free ngrok plan, the public URL usually changes whenever ngrok restarts.
+Update the GitHub webhook Payload URL each time it changes, otherwise GitHub
+will keep sending events to the old tunnel.
+
 The CI workflow publishes a multi-arch image to GHCR, so local k3d on amd64 and
 ARM64 nodes can pull the same PR tag. If the GHCR package is private, set
 `GHCR_USERNAME` and `GHCR_TOKEN` in `.env`, then run `make helm-secrets` and
@@ -391,6 +402,17 @@ ARM64 nodes can pull the same PR tag. If the GHCR package is private, set
 For real preview creation, `ARGOCD_TOKEN` must be set. The local cluster setup creates
 a dedicated `snapenv-worker` ArgoCD API account for this token. Without it, the worker
 fails the deployment instead of marking a preview as ready without creating it.
+
+Current local-mode behavior:
+
+- A `pull_request` webhook registers or updates the PR in SnapEnv.
+- A successful `workflow_run` webhook for the `CI` workflow creates or updates the
+  preview through ArgoCD.
+- A close or merge webhook destroys the ArgoCD Application and updates the PR status.
+- If SnapEnv misses an old close/merge event, that historical PR can remain visible
+  as open in the database until the event is redelivered or the local database is
+  cleaned.
+- The preview URL is `http://pr-<number>.localhost` when `PREVIEW_DOMAIN=localhost`.
 
 ---
 
@@ -533,7 +555,7 @@ make grafana-ui       # Print Grafana URL
 | `GET` | `/api/pipelines/{id}` | Pipeline detail with all stage results |
 | `GET` | `/api/events` | Recent events (filter by PR) |
 | `GET` | `/api/stats` | Dashboard aggregate metrics |
-| `POST` | `/api/webhooks/github` | GitHub webhook receiver (PR events) |
+| `POST` | `/api/webhooks/github` | GitHub webhook receiver (`pull_request` and `workflow_run`) |
 | `WS` | `/api/events/ws` | Real-time event stream (WebSocket) |
 | `GET` | `/docs` | Swagger UI |
 
@@ -629,7 +651,7 @@ make k8s-logs
 
 ```bash
 # Tail worker logs
-kubectl logs -n snapenv -l app=snapenv-worker -f
+kubectl logs -l app=snapenv,component=worker -f
 
 # Expected output:
 # Task handle_pr_opened[<uuid>] received
@@ -647,6 +669,20 @@ kubectl logs -n snapenv -l app=snapenv-worker -f
 Open `http://snapenv.localhost` (or `http://snapenv.<ip>.nip.io`).
 
 The dashboard connects via WebSocket to `/api/events/ws`. Every event written to the database is broadcast to all connected browsers in real time.
+
+The dashboard cards are computed from SnapEnv's local PostgreSQL state:
+
+- **Active PRs**: PR records with status `open`.
+- **Environments Running**: environment records with status `running`.
+- **Deployments Today**: pipeline records created since midnight UTC.
+- **Success Rate**: successful finished pipelines divided by successful + failed
+  finished pipelines over the last 30 days.
+
+Seeing `0 / 0 / 0 / 0%` is normal after the only real PR has been merged and its
+preview has been destroyed. It only means there are no currently open tracked PRs,
+no running previews, and no finished deployment pipeline in the current stats
+window. Historical or test rows can still exist in the database if they were
+created before the GitHub close/merge webhook path was active.
 
 You can also query the API directly:
 
@@ -683,6 +719,9 @@ When you close or merge the PR:
 | Task never appears in worker | Worker logs | Check Redis is reachable: `kubectl exec -it svc/snapenv-redis -- redis-cli ping` |
 | Worker pod CrashLoopBackOff | `kubectl describe pod` | Missing env var — check `REDIS_HOST`, `POSTGRES_*` in the secret |
 | Dashboard shows no events | Browser console | WebSocket `ws://snapenv.localhost/api/events/ws` blocked? Check ingress for `/api/events/` path |
+| PR appears but no preview URL | GitHub webhook deliveries + worker logs | The `pull_request` event arrived, but the successful `workflow_run` event did not, was ignored as stale, or deployment failed |
+| Old PR still appears as active | GitHub webhook deliveries + DB state | SnapEnv probably missed the historical close/merge webhook. Redeliver the event or clean the local DB |
+| Dashboard stats are all zero | `/api/stats` | Expected when no PR is open, no environment is running, and no finished deployment pipeline is counted in the stats window |
 | Pod image not updated | `kubectl get pod` | Run `make k8s-build` before `make k8s-deploy` to rebuild and reimport the image |
 
 ---
